@@ -1,26 +1,9 @@
 package main
 
 import (
-	"math"
 	"math/rand/v2"
 	"testing"
 )
-
-// wobble simulates a hand-drawn version of a shape: random scale/aspect/rotation,
-// per-point jitter, and an over- or under-shot ending.
-func wobble(pts []Pt, rng *rand.Rand) []Pt {
-	sx := 40 + rng.Float64()*60
-	sy := sx * (0.8 + rng.Float64()*0.4)
-	rot := (rng.Float64() - 0.5) * 0.35
-	cos, sin := math.Cos(rot), math.Sin(rot)
-	keep := len(pts) - rng.IntN(len(pts)/12+1)
-	out := make([]Pt, 0, keep)
-	for _, p := range pts[:keep] {
-		x, y := p.X*sx, p.Y*sy
-		out = append(out, Pt{x*cos - y*sin + rng.NormFloat64()*1.2, x*sin + y*cos + rng.NormFloat64()*1.2, p.ID})
-	}
-	return out
-}
 
 func TestBuiltinShapesAreDistinguishable(t *testing.T) {
 	r := &Recognizer{}

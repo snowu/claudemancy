@@ -79,12 +79,15 @@ To change a default, copy its file into your user or project folder and edit
 it. To remove one, add a same-named file containing `disabled: true` and `---`.
 A spell can cast a `skill:` (with optional `args:`) or a freeform `prompt:`.
 
-Full format and drawing tips: [docs/sigils.md](docs/sigils.md). You can also
-ask Claude: the plugin ships an **inscribe** skill, so "add a spell that runs
-/deploy when I draw a diamond" works.
+Full format and drawing tips: [docs/sigils.md](docs/sigils.md).
+
+**Or let Claude do it:** the plugin ships an **inscribe** skill. Say "add a spell
+that runs /deploy" (or run `/claudemancy:inscribe deploy`). Claude picks a free,
+easy-to-recognise symbol, writes the file and validates it.
 
 ```sh
 bin/claudemancy-cli --list               # every spell, its source file, the folders
+bin/claudemancy-cli --suggest 5          # most distinct free symbols, drawn and ready to paste
 bin/claudemancy-cli --check [draft.sigil] # validate files, flag look-alike sigils
 bin/claudemancy-cli --train deploy       # draw it, ⏎ to add each drawing to your user file
 bin/claudemancy-cli --migrate            # move pre-0.3 trained spells out of spellbook.json

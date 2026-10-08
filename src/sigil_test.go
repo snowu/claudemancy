@@ -106,3 +106,27 @@ func scribble(rng *rand.Rand) []Pt {
 	}
 	return p
 }
+
+func TestSuggestOffersOnlyFreeDistinctSymbols(t *testing.T) {
+	spells, _ := LoadSpellDirs([]SpellDir{{"../spells", "built-in"}})
+	b := &Spellbook{MaxDistance: defaultMaxDistance, Spells: spells}
+	sug := Suggest(b)
+	if len(sug) < 3 {
+		t.Fatalf("only %d suggestions", len(sug))
+	}
+	for _, s := range sug {
+		if s.Dist < closeCall || s.Hits*10 < suggestTrials*8 {
+			t.Errorf("%s suggested with dist %.2f, %d/%d hits", s.Symbol, s.Dist, s.Hits, suggestTrials)
+		}
+		// Shapes the defaults already use must never come back.
+		switch s.Symbol {
+		case "triangle", "circle", "square", "star", "lightning", "check", "cross", "infinity":
+			t.Errorf("suggested %s, which a default spell already uses", s.Symbol)
+		}
+		// A suggestion pasted into a file must parse and pass --check.
+		src := FormatSigil(Spell{Name: s.Symbol, Skill: "x", Drawings: []Drawing{s.Drawing}})
+		if _, err := ParseSigil(s.Symbol, src); err != nil {
+			t.Errorf("%s: %v", s.Symbol, err)
+		}
+	}
+}

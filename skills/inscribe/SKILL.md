@@ -1,11 +1,12 @@
 ---
 name: inscribe
-description: Add, change, override or disable claudemancy spells, the sigil drawings that cast a skill or a prompt when the user draws them after /cast. Use when the user wants a new spell, a different drawing for a skill, a spell that runs an instruction, or to customise or remove a default spell.
+description: Add a new claudemancy spell, or change, override or disable an existing one. A spell is a sigil drawing that casts a skill or a prompt when the user draws it after /cast. Use when the user wants a spell for a skill or an instruction, a different drawing or symbol for a spell, or to customise or remove a default spell.
+argument-hint: "[what the spell should cast, and optionally a symbol]"
 ---
 
 # Inscribe a claudemancy spell
 
-A spell is one plain-text `.sigil` file: a short header, a `---` line, then an ASCII drawing of the sigil. Any character other than a space or `.` is ink.
+A spell is one plain-text `.sigil` file: a header, a `---` line, then an ASCII drawing of the sigil. Any character other than a space or `.` is ink.
 
 ```
 name: Ward of Deployment
@@ -23,52 +24,58 @@ args: staging
            #
 ```
 
-## Header keys
+The tools live in this plugin. The plugin root is two directories above this SKILL.md:
+
+```sh
+CLI="<plugin root>/bin/claudemancy-cli"
+"$CLI" --list --project "$PWD"          # existing spells, their files, the spell folders
+"$CLI" --suggest 5 --project "$PWD"     # most distinct free symbols, drawn and ready to paste
+"$CLI" --check --project "$PWD" [draft] # validate everything; flags look-alike sigils
+```
+
+## Workflow
+
+1. **Work out what the spell casts.** Ask only if it isn't clear.
+   - A skill: `skill: <name>`, plus optional `args:`. Use the exact skill name, without the slash, and with the plugin prefix if it has one (`my-plugin:deploy`).
+   - Anything else: `prompt: <instruction>`. Write it as the user would type it. Make it self-contained and safe to run whenever cast.
+2. **Pick the folder.**
+   - User folder `~/.config/claudemancy/spells/` by default.
+   - Project folder `<repo>/.claude/claudemancy/spells/` when the spell is for this repo or the team.
+   - Never edit the plugin's built-in `spells/` in an installed plugin.
+3. **Look at what exists:** run `--list`. If the user wants to change an existing spell, note its file name. The **same file name** in your folder overrides it.
+4. **Choose the symbol.**
+   - If the user named a shape, draw it.
+   - Otherwise run `--suggest 5` and offer the top two or three, showing their drawings, or take the first if the user doesn't mind.
+   - Suggestions are already checked: they are free, and recognised in at least 80% of simulated hand-drawn casts.
+5. **Write the file** as `<folder>/<id>.sigil`, where the id uses lowercase letters, digits and dashes (e.g. `deploy-staging`). Give it an evocative `name:`; the defaults use Doctor Strange-style names like "Ward of Cyttorak".
+6. **Run `--check`.**
+   - Fix every `✗` (a broken file, or a sigil too similar to another) before finishing.
+   - A `⚠` (close pair) is acceptable; mention it.
+7. **Tell the user:** the file path, what to draw, and that `/cast` will now offer it. Suggest they train their own handwriting for it in a terminal: `<plugin root>/bin/claudemancy-cli --train <id>`. That needs a mouse in an interactive terminal, so don't run it yourself.
+
+## Common changes
+
+- **New drawing for an existing spell:** copy its file into the user folder under the same name, then replace the drawing. Use `--suggest` to pick a distinct one.
+- **Make a spell cast something else:** copy its file into the user folder and change `skill:`, `args:` or `prompt:`.
+- **Remove a default:** create `<user folder>/<id>.sigil` containing only `disabled: true` and a `---` line.
+- **Accept another way of drawing it:** add another drawing after a further `---` line.
+
+## Format reference
 
 | Key | Meaning |
 |---|---|
-| `name` | Title shown in the grimoire and on the cast. Defaults to the file name. |
-| `skill` | Skill to invoke, without the slash, e.g. `code-review` or `my-plugin:deploy`. |
-| `args` | Optional arguments passed to that skill. |
-| `prompt` | Instead of `skill`: an instruction Claude carries out as if the user typed it. |
-| `aspect` | Height ÷ width of a character cell. Default `2`, right for monospace fonts. |
-| `disabled` | `true` hides a spell with the same file name from an earlier folder. Needs no drawing. |
+| `name` | Title in the grimoire and on the cast. Defaults to the file name. |
+| `skill` | Skill to invoke. Use this or `prompt`, not both. |
+| `args` | Arguments for the skill. |
+| `prompt` | An instruction Claude carries out as if the user typed it. |
+| `aspect` | Character height ÷ width. Default `2`, right for monospace fonts. |
+| `disabled` | `true` hides the spell with this file name from earlier folders. |
 
-Use exactly one of `skill` or `prompt`. Lines starting with `//` in the header are comments.
+Header lines starting with `//` are comments.
 
-## Where the file goes
+Drawings:
+- About 20–24 characters wide, single-width lines, proportions as they look in a monospace editor.
+- Stroke order and direction don't matter, and one-character gaps are bridged.
+- At least 4 ink characters.
 
-Spells load from three folders. A file in a later folder replaces the earlier one with the **same file name**:
-
-1. Built-in: `spells/` in the plugin. Don't edit these in an installed plugin; updates overwrite them.
-2. User: `~/.config/claudemancy/spells/`. Personal spells; use this by default.
-3. Project: `<repo>/.claude/claudemancy/spells/`. Shared with everyone working in that repo.
-
-- **To change a default's drawing or what it casts:** copy the built-in file into the user (or project) folder under the same name and edit the copy.
-- **To remove a default:** create a file with that name containing only `disabled: true` and a `---` line.
-- **New spells** use a new lowercase file name with dashes, e.g. `deploy-staging.sigil`.
-
-## Drawing well
-
-- Draw about 20–24 characters wide with single-width lines. Keep the shape's proportions as they look in a monospace editor.
-- The recognizer ignores stroke order and direction, so only the shape matters, not how it's traced.
-- Pick a shape that is clearly different from the existing spells. Run the list command below to see them.
-- To accept more than one way of drawing it, add another drawing after another `---` line.
-
-## Check your work
-
-The plugin root is two directories above this SKILL.md. Run:
-
-```sh
-<plugin root>/bin/claudemancy-cli --list --project "$PWD"                 # existing spells and folders
-<plugin root>/bin/claudemancy-cli --check --project "$PWD" [draft.sigil]  # validate
-```
-
-`--check` parses every spell plus any draft files you pass, and compares each pair of sigils:
-
-- `✗ … look too similar` (exit 1): hand-drawn versions get cast as each other. Redraw one of them to be more distinct.
-- `⚠ … are close`: usually fine. Mention it to the user.
-
-Fix every `✗` before finishing, then tell the user the file path and that they can try it with `/cast`.
-
-The user can also train a sigil by drawing it: `<plugin root>/bin/claudemancy-cli --train <file-name>` opens the canvas and appends each drawing (⏎ to save) to their user sigil file. That needs an interactive terminal, so suggest it rather than running it yourself.
+Full reference: `docs/sigils.md` in the plugin.

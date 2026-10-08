@@ -85,6 +85,7 @@ stops the other spells from casting.
 | Command | What it does |
 |---|---|
 | `--list --project .` | Every loaded spell with a Braille preview, what it casts, and its file. Also lists the folders. Same as `/spells`. |
+| `--suggest N --project .` | Tests a library of ready-drawn symbols (chevrons, arrow, plus, diamond, M, W, bowtie, crescent, …) against the current spells. Prints the N most distinct that also recognise in at least 80% of simulated hand-drawn casts, as drawings to paste. |
 | `--check --project . [draft.sigil …]` | Validates every file, plus drafts (which override loaded spells with the same id). Then compares each pair of sigils. Exits 1 on errors. |
 | `--train <id>` | Opens the canvas. Each drawing you save with ⏎ is appended to `~/.config/claudemancy/spells/<id>.sigil`. If no such file exists yet, it starts from the current spell with that id, or creates a spell for the skill named `<id>`. |
 | `--migrate` | Converts spells trained before 0.3 (stored as point arrays in `spellbook.json`) into user sigil files. |

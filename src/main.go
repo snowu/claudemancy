@@ -28,10 +28,11 @@ func main() {
 	bookFlag := flag.String("spellbook", "", "settings file (default ~/.config/claudemancy/spellbook.json)")
 	project := flag.String("project", "", "project directory whose .claude/claudemancy/spells override the others")
 	train := flag.String("train", "", "add a drawing to the user sigil file with this id (e.g. code-review)")
-	demo := flag.String("demo", "", "auto-draw a built-in shape and cast it")
+	demo := flag.String("demo", "", "auto-draw a library symbol (see --suggest) and cast it")
 	list := flag.Bool("list", false, "list spells, where each comes from, and the spell folders")
 	check := flag.Bool("check", false, "validate sigil files (plus any given as arguments) and warn about look-alike sigils")
 	migrate := flag.Bool("migrate", false, "move trained spells from spellbook.json into sigil files")
+	suggest := flag.Int("suggest", 0, "print the N most distinct ready-drawn symbols for a new spell")
 	t0 := flag.Int64("t0", 0, "launch timestamp (unix ns) to measure popup latency")
 	latencyLog := flag.String("latency-log", "", "append popup latency (ms) to this file")
 	flag.Parse()
@@ -58,6 +59,9 @@ func main() {
 		return
 	case *check:
 		os.Exit(Check(book, flag.Args()))
+	case *suggest > 0:
+		PrintSuggestions(book, *suggest)
+		return
 	case *migrate:
 		written, err := book.Migrate(cmp.Or(*bookFlag, userSpellbookPath()))
 		for _, f := range written {
@@ -73,8 +77,8 @@ func main() {
 	case *train != "" && !validID(*train):
 		fatal(fmt.Errorf("%q can't be a sigil id: use lowercase letters, digits and dashes, like %q", *train, slug(*train)))
 	}
-	if *demo != "" && shapes[*demo] == nil {
-		fatal(fmt.Errorf("unknown shape %q; have %v", *demo, shapeNames()))
+	if *demo != "" && symbols[*demo] == nil {
+		fatal(fmt.Errorf("unknown symbol %q; have %v", *demo, symbolNames()))
 	}
 
 	term, err := OpenTerm()
@@ -162,7 +166,7 @@ func newApp(t *Term, book *Spellbook, train, demo string) *App {
 	if demo != "" {
 		w, h := a.cv.WorldW(), a.cv.WorldH()
 		size := math.Min(w, h) * 0.5
-		for _, p := range shapes[demo]() {
+		for _, p := range symbols[demo]() {
 			a.demo = append(a.demo, Pt{w/2 + (p.X-0.5)*size + a.rng.NormFloat64()*0.6, h/2 + (p.Y-0.5)*size + a.rng.NormFloat64()*0.6, p.ID})
 		}
 	}
