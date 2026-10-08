@@ -7,7 +7,7 @@ it resolves into a spinning rune mandala, and Claude invokes the bound skill.
 ```
 /cast                      draw → skill runs
 /cast only the auth module draw → skill runs with those extra instructions
-/spells                    list every mapped sigil → skill
+/spells                    list every spell, its sigil and its file
 ```
 
 The canvas also shows a **grimoire** panel listing each spell with its sigil;
@@ -32,34 +32,67 @@ Or from a clone, for one session: `claude --plugin-dir path/to/claudemancy`
 
 - **`UserPromptSubmit` hook** (`bin/cast-hook`) catches `/cast` *before* the model
   runs, so the canvas pops without waiting on an LLM round-trip. It blocks until
-  you finish drawing, then injects "invoke skill X" as context. Esc dismisses
-  the spell and blocks the prompt.
+  you finish drawing, then injects "invoke skill X" (or a prompt spell's
+  instruction) as context. Esc dismisses the spell and blocks the prompt.
 - **`bin/claudemancy-popup`** picks the fastest overlay available (see below) and
   reads the result back over a fifo.
 - **`bin/claudemancy`** (Go, ~3 MB, no runtime deps) is the TUI: SGR mouse
   tracking (pixel-precise via mode 1016 where supported), Braille 2×4 sub-cell
-  rendering in truecolor, $P point-cloud recognition, a procedural mandala per
-  spell (derived from a hash of its name).
+  rendering in truecolor, $P point-cloud recognition against the traced
+  `.sigil` drawings, a procedural mandala per spell (derived from a hash of its
+  name).
 
 ## Spells
 
-Edit `~/.config/claudemancy/spellbook.json` (created on first `--train`; built-in
-default otherwise — see `src/spellbook.default.json`):
+Every spell is a plain-text `.sigil` file: a short header, then an ASCII drawing
+of the sigil. Humans and agents can add a spell by adding a file.
 
-```json
-{ "name": "Eye of Scrutiny", "shape": "triangle", "skill": "code-review", "args": "high" }
+```
+name: Ward of Cyttorak
+skill: security-review
+---
+######################
+#                    #
+#                    #
+######################
 ```
 
-Built-in shapes: `circle triangle square star lightning check cross spiral infinity`.
-Square vs circle is the weakest pair; train your own to fix that.
+| Draw | Spell | Casts |
+|---|---|---|
+| triangle | Eye of Scrutiny | `/code-review` |
+| circle | Circle of Purity | `/simplify` |
+| square | Ward of Cyttorak | `/security-review` |
+| star | Star of Awakening | `/run` |
+| lightning bolt | Bolt of Genesis | `/init` |
+| check mark | Seal of Passage | `/fewer-permission-prompts` |
+| infinity | Ouroboros Loop | prompt: run the tests, fix failures, repeat |
+| X | Seal of Binding | prompt: commit the current work (no push) |
 
-**Train your own sigils** — draw it 3–5 times, ⏎ after each:
+Spells load from three folders. A later folder overrides an earlier one by
+file name:
+
+1. **built-in**: [`spells/`](spells) in this repo
+2. **user**: `~/.config/claudemancy/spells/`
+3. **project**: `<repo>/.claude/claudemancy/spells/`, shared with your team
+
+To change a default, copy its file into your user or project folder and edit
+it. To remove one, add a same-named file containing `disabled: true` and `---`.
+A spell can cast a `skill:` (with optional `args:`) or a freeform `prompt:`.
+
+Full format and drawing tips: [docs/sigils.md](docs/sigils.md). You can also
+ask Claude: the plugin ships an **inscribe** skill, so "add a spell that runs
+/deploy when I draw a diamond" works.
 
 ```sh
-bin/claudemancy --train security-review    # binds to a skill of the same name
-bin/claudemancy --list
-bin/claudemancy --demo star                # watch a cast without drawing
+bin/claudemancy-cli --list               # every spell, its source file, the folders
+bin/claudemancy-cli --check [draft.sigil] # validate files, flag look-alike sigils
+bin/claudemancy-cli --train deploy       # draw it, ⏎ to add each drawing to your user file
+bin/claudemancy-cli --migrate            # move pre-0.3 trained spells out of spellbook.json
+bin/claudemancy --demo star              # watch a cast without drawing
 ```
+
+`~/.config/claudemancy/spellbook.json` is now just settings: `glow`,
+`glyphs` and `max_distance`.
 
 Glow: `"glow": "soft"` (default) scatters a shimmering halo of ember dots beside
 every line, with no cell backgrounds, so nothing renders as boxes; `"full"` adds
@@ -68,7 +101,8 @@ plain lines.
 
 Controls: draw with left mouse (multi-stroke is fine) · auto-casts 0.55 s after
 you lift · ⏎ cast now · ⌫ / right-click clear · ⇥ toggle grimoire · Esc dismiss ·
-any key skips the animation. `max_distance` in the spellbook trades forgiveness for misfires.
+any key skips the animation. `max_distance` in spellbook.json trades forgiveness
+for misfires (default 1.22).
 
 ## Portability
 
@@ -93,7 +127,7 @@ popup (or `CLAUDEMANCY_TERMINAL=kitty`).
 Popup latency on Ghostty + Hyprland: ~165 ms launch → first frame (it reuses the
 running Ghostty over D-Bus; a cold Ghostty start is ~900 ms). Measure yours:
 `CLAUDEMANCY_LATENCY_LOG=/tmp/lat bin/claudemancy-popup --demo circle` — the canvas
-also flashes the number top-right.
+also flashes the number bottom-right.
 
 Env knobs: `CLAUDEMANCY_TERMINAL`, `CLAUDEMANCY_SIZE="W H"`, `CLAUDEMANCY_TIMEOUT`.
 

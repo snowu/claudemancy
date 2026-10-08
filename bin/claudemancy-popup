@@ -16,7 +16,7 @@ bin=$here/claudemancy
 needs_build() {
   [[ -x $bin ]] || return 0
   local f
-  for f in "$here"/../src/*.go "$here"/../src/*.json "$here/../go.mod"; do
+  for f in "$here"/../src/*.go "$here/../go.mod"; do
     [[ $f -nt $bin ]] && return 0
   done
   return 1

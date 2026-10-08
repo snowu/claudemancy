@@ -2,6 +2,7 @@
 package main
 
 import (
+	"cmp"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -17,16 +18,20 @@ type Result struct {
 	Spell     string  `json:"spell,omitempty"`
 	Skill     string  `json:"skill,omitempty"`
 	Args      string  `json:"args,omitempty"`
+	Prompt    string  `json:"prompt,omitempty"`
 	Score     float64 `json:"score,omitempty"`
 	Cancelled bool    `json:"cancelled,omitempty"`
 }
 
 func main() {
 	out := flag.String("out", "", "write the result JSON here (file or fifo) instead of stdout")
-	bookFlag := flag.String("spellbook", "", "spellbook path (default ~/.config/claudemancy/spellbook.json, else built-in)")
-	train := flag.String("train", "", "inscribe new templates for this spell/skill name")
+	bookFlag := flag.String("spellbook", "", "settings file (default ~/.config/claudemancy/spellbook.json)")
+	project := flag.String("project", "", "project directory whose .claude/claudemancy/spells override the others")
+	train := flag.String("train", "", "add a drawing to the user sigil file with this id (e.g. code-review)")
 	demo := flag.String("demo", "", "auto-draw a built-in shape and cast it")
-	list := flag.Bool("list", false, "list spells and built-in shapes")
+	list := flag.Bool("list", false, "list spells, where each comes from, and the spell folders")
+	check := flag.Bool("check", false, "validate sigil files (plus any given as arguments) and warn about look-alike sigils")
+	migrate := flag.Bool("migrate", false, "move trained spells from spellbook.json into sigil files")
 	t0 := flag.Int64("t0", 0, "launch timestamp (unix ns) to measure popup latency")
 	latencyLog := flag.String("latency-log", "", "append popup latency (ms) to this file")
 	flag.Parse()
@@ -42,16 +47,31 @@ func main() {
 		sink = f
 	}
 
-	book, bookPath, err := LoadSpellbook(*bookFlag)
+	dirs := SpellDirs(*project)
+	book, err := LoadSpellbook(*bookFlag, dirs)
 	if err != nil {
-		fatal(fmt.Errorf("spellbook %s: %w", bookPath, err))
+		fatal(err)
 	}
-	if *list {
-		if _, err := os.Stat(bookPath); err != nil {
-			bookPath = "built-in default; --train or create " + bookPath + " to customise"
-		}
-		PrintList(book, bookPath)
+	switch {
+	case *list:
+		PrintList(book, dirs)
 		return
+	case *check:
+		os.Exit(Check(book, flag.Args()))
+	case *migrate:
+		written, err := book.Migrate(cmp.Or(*bookFlag, userSpellbookPath()))
+		for _, f := range written {
+			fmt.Println("wrote", f)
+		}
+		if err != nil {
+			fatal(err)
+		}
+		if len(written) == 0 {
+			fmt.Println("nothing to migrate")
+		}
+		return
+	case *train != "" && !validID(*train):
+		fatal(fmt.Errorf("%q can't be a sigil id: use lowercase letters, digits and dashes, like %q", *train, slug(*train)))
 	}
 	if *demo != "" && shapes[*demo] == nil {
 		fatal(fmt.Errorf("unknown shape %q; have %v", *demo, shapeNames()))
@@ -61,7 +81,8 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	app := newApp(term, book, bookPath, *train, *demo)
+	app := newApp(term, book, *train, *demo)
+	app.reload = func() (*Spellbook, error) { return LoadSpellbook(*bookFlag, dirs) }
 	app.t0, app.latencyLog = *t0, *latencyLog
 	func() {
 		defer func() {
@@ -95,14 +116,14 @@ const (
 type Spark struct{ x, y, vx, vy, life, max float64 }
 
 type App struct {
-	term     *Term
-	cv       *Canvas
-	pixel    bool
-	book     *Spellbook
-	bookPath string
-	rec      *Recognizer
-	train    string
-	rng      *rand.Rand
+	term   *Term
+	cv     *Canvas
+	pixel  bool
+	book   *Spellbook
+	reload func() (*Spellbook, error)
+	rec    *Recognizer
+	train  string
+	rng    *rand.Rand
 
 	strokes     [][]Pt
 	grimoire    bool
@@ -130,11 +151,14 @@ type App struct {
 	result              Result
 }
 
-func newApp(t *Term, book *Spellbook, path, train, demo string) *App {
-	a := &App{term: t, book: book, bookPath: path, rec: book.Recognizer(), train: train,
+func newApp(t *Term, book *Spellbook, train, demo string) *App {
+	a := &App{term: t, book: book, rec: book.Recognizer(), train: train,
 		rng: rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 7)), result: Result{Cancelled: true},
 		grimoire: demo == "", sigils: book.Sigils()}
 	a.resize()
+	if n := len(book.Problems); n > 0 {
+		a.say(fmt.Sprintf("%d sigil file(s) failed to load — run /spells to see why", n), 4)
+	}
 	if demo != "" {
 		w, h := a.cv.WorldW(), a.cv.WorldH()
 		size := math.Min(w, h) * 0.5
@@ -333,7 +357,8 @@ func (a *App) tryCast() {
 	}
 
 	a.spell = a.book.Spells[m.Spell]
-	a.result = Result{Spell: a.spell.Name, Skill: a.spell.Skill, Args: a.spell.Args, Score: math.Round(m.Score()*100) / 100}
+	a.result = Result{Spell: a.spell.Name, Skill: a.spell.Skill, Args: a.spell.Args, Prompt: a.spell.Prompt,
+		Score: math.Round(m.Score()*100) / 100}
 	a.mandala = NewMandala(a.spell.Name, a.book.Glyphs)
 	minX, minY, maxX, maxY := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
 	for _, p := range pts {
@@ -353,17 +378,20 @@ func (a *App) inscribe() {
 	if len(pts) < 6 {
 		return
 	}
-	n := a.book.Inscribe(a.train, pts)
-	if err := a.book.Save(a.bookPath); err != nil {
+	path, n, err := a.book.Inscribe(a.train, pts)
+	if err != nil {
 		a.say("could not save: "+err.Error(), 3)
 		return
+	}
+	if book, err := a.reload(); err == nil {
+		a.book = book
 	}
 	a.rec, a.sigils = a.book.Recognizer(), a.book.Sigils()
 	for _, p := range pts {
 		a.spark(p.X, p.Y, 10+a.rng.Float64()*30, 0.3+a.rng.Float64()*0.4)
 	}
 	a.strokes = nil
-	a.say(fmt.Sprintf("inscribed ✓  %s now has %d trained sigil(s) — draw it again to strengthen it", a.train, n), 2.5)
+	a.say(fmt.Sprintf("inscribed ✓  %s now has %d drawing(s) in %s", a.train, n, path), 3)
 }
 
 func (a *App) update(dt float64) {

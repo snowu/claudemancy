@@ -33,7 +33,7 @@ func TestBuiltinShapesAreDistinguishable(t *testing.T) {
 	for i, n := range names {
 		hits := 0
 		for range trials {
-			if m := r.Recognize(wobble(shapes[n](), rng)); m.Spell == i && m.Confident(1.3) {
+			if m := r.Recognize(wobble(shapes[n](), rng)); m.Spell == i && m.Confident(defaultMaxDistance) {
 				hits++
 			}
 		}
@@ -60,7 +60,7 @@ func TestScribblesAreRejected(t *testing.T) {
 			y += rng.NormFloat64() * 6
 			p = append(p, Pt{x, y, 0})
 		}
-		if r.Recognize(p).Confident(1.3) {
+		if r.Recognize(p).Confident(defaultMaxDistance) {
 			misfires++
 		}
 	}

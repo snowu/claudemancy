@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Runs the claudemancy binary with the given flags, building it first if it is
+# missing or older than its sources. Used by /spells and the inscribe skill:
+#   claudemancy-cli --list  --project "$PWD"
+#   claudemancy-cli --check --project "$PWD" [draft.sigil ...]
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if ! out=$("$here/../build.sh" --if-stale 2>&1); then
+  echo "claudemancy could not be built (needs Go ≥1.24 and network access for the first build):"
+  tail -5 <<<"$out"
+  exit 1
+fi
+exec "$here/claudemancy" "$@"

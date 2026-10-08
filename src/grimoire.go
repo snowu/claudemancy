@@ -6,10 +6,13 @@ import (
 	"strings"
 )
 
-// Sigil returns the shape a spell is drawn as: its built-in shape, else its
-// first trained template.
+// Sigil returns the strokes a spell is shown as: its first drawing, else (for
+// legacy spellbook.json spells) its built-in shape or first trained template.
 func (b *Spellbook) Sigil(i int) []Pt {
 	s := b.Spells[i]
+	if len(s.Drawings) > 0 {
+		return s.Drawings[0].Strokes()
+	}
 	if gen, ok := shapes[s.Shape]; ok {
 		return gen()
 	}
@@ -28,7 +31,11 @@ func (b *Spellbook) Sigils() [][]Pt {
 	return out
 }
 
+// Invocation is how the grimoire shows what a spell does.
 func (s Spell) Invocation() string {
+	if s.Prompt != "" {
+		return "✎ " + s.Prompt
+	}
 	if s.Args != "" {
 		return "/" + s.Skill + " " + s.Args
 	}
@@ -109,23 +116,28 @@ func (c *Canvas) Plain() []string {
 	return lines
 }
 
-// PrintList writes the spellbook with a small Braille sigil per spell.
-func PrintList(b *Spellbook, path string) {
-	fmt.Printf("claudemancy grimoire  (%s)\n\n", path)
+// PrintList writes the spellbook with a small Braille sigil per spell, where
+// each spell comes from, and any sigil files that failed to load.
+func PrintList(b *Spellbook, dirs []SpellDir) {
+	fmt.Println("claudemancy grimoire")
+	fmt.Println()
 	for i, s := range b.Spells {
 		c := NewCanvas(5, 3, 1)
 		drawSigil(c, b.Sigil(i), 0.5, 0.5, 9, 11, 1)
 		art := c.Plain()
-		how := s.Shape
-		if n := len(s.Templates); n > 0 {
-			if how != "" {
-				how += " + "
-			}
-			how += fmt.Sprintf("%d trained", n)
+		from := s.Source
+		if s.File != "" {
+			from += "  " + s.File
 		}
 		fmt.Printf("  %s   %s\n", art[0], s.Name)
-		fmt.Printf("  %s   %s\n", art[1], s.Invocation())
-		fmt.Printf("  %s   %s\n\n", art[2], how)
+		fmt.Printf("  %s   %s\n", art[1], truncate(s.Invocation(), 72))
+		fmt.Printf("  %s   %s\n\n", art[2], from)
 	}
-	fmt.Println("built-in shapes:", strings.Join(shapeNames(), " "))
+	for _, p := range b.Problems {
+		fmt.Println("  ✗", p)
+	}
+	fmt.Println("spell folders (later ones override earlier ones by filename):")
+	for _, d := range dirs {
+		fmt.Printf("  %-9s %s\n", d.Label, d.Path)
+	}
 }

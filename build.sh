@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 if [[ ${1:-} == --if-stale && -x bin/claudemancy ]]; then
   stale=0
-  for f in src/*.go src/*.json go.mod; do [[ $f -nt bin/claudemancy ]] && stale=1; done
+  for f in src/*.go go.mod; do [[ $f -nt bin/claudemancy ]] && stale=1; done
   ((stale)) || exit 0
 fi
 go=(go)
