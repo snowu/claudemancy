@@ -47,10 +47,10 @@ func main() {
 		fatal(fmt.Errorf("spellbook %s: %w", bookPath, err))
 	}
 	if *list {
-		for _, s := range book.Spells {
-			fmt.Printf("%-22s %-10s /%s %s (%d trained)\n", s.Name, s.Shape, s.Skill, s.Args, len(s.Templates))
+		if _, err := os.Stat(bookPath); err != nil {
+			bookPath = "built-in default; --train or create " + bookPath + " to customise"
 		}
-		fmt.Println("\nbuilt-in shapes:", shapeNames())
+		PrintList(book, bookPath)
 		return
 	}
 	if *demo != "" && shapes[*demo] == nil {
@@ -105,6 +105,7 @@ type App struct {
 	rng      *rand.Rand
 
 	strokes     [][]Pt
+	grimoire    bool
 	drawing     bool
 	lastRelease float64
 	sparks      []Spark
@@ -129,7 +130,8 @@ type App struct {
 
 func newApp(t *Term, book *Spellbook, path, train, demo string) *App {
 	a := &App{term: t, book: book, bookPath: path, rec: book.Recognizer(), train: train,
-		rng: rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 7)), result: Result{Cancelled: true}}
+		rng: rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 7)), result: Result{Cancelled: true},
+		grimoire: demo == ""}
 	a.resize()
 	if demo != "" {
 		w, h := a.cv.WorldW(), a.cv.WorldH()
@@ -216,6 +218,8 @@ func (a *App) handle(e Event) {
 			a.st = stDone
 		case a.st == stCast:
 			a.st = stDone // any key skips the animation
+		case e.Key == '\t':
+			a.grimoire = !a.grimoire
 		case e.Key == '\r' && a.train != "":
 			a.inscribe()
 		case e.Key == '\r':
@@ -460,11 +464,15 @@ func (a *App) draw() {
 		}
 	}
 
+	if a.grimoire && a.st != stCast {
+		drawGrimoire(c, a.book)
+	}
+
 	hud := RGB{150, 68, 18}
 	if a.train != "" {
-		c.Text(1, 0, "✦ inscribing "+a.train+"  ·  draw the sigil  ·  ⏎ save  ·  ⌫ clear  ·  esc done", hud)
+		c.Text(1, 0, "✦ inscribing "+a.train+"  ·  draw the sigil  ·  ⏎ save  ·  ⌫ clear  ·  ⇥ grimoire  ·  esc done", hud)
 	} else if a.st != stCast {
-		c.Text(1, 0, "✦ claudemancy  ·  draw a sigil  ·  ⌫ clear  ·  esc dismiss", hud)
+		c.Text(1, 0, "✦ claudemancy  ·  draw a sigil  ·  ⌫ clear  ·  ⇥ grimoire  ·  esc dismiss", hud)
 	}
 	if a.latency != "" && a.now < 2.5 {
 		c.Text(c.Cols-len([]rune(a.latency))-1, 0, a.latency, hud)

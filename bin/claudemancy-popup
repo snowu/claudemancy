@@ -9,7 +9,7 @@ set -uo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # Fresh installs ship source only; build the canvas on first use.
-if [[ ! -x $here/claudemancy ]] && ! "$here/../build.sh" >&2; then
+if ! "$here/../build.sh" --if-missing >&2; then
   echo '{"error":"could not build claudemancy (needs Go ≥1.24): run build.sh"}'
   exit 1
 fi

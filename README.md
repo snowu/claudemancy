@@ -7,7 +7,11 @@ it resolves into a spinning rune mandala, and Claude invokes the bound skill.
 ```
 /cast                      draw → skill runs
 /cast only the auth module draw → skill runs with those extra instructions
+/spells                    list every mapped sigil → skill
 ```
+
+The canvas also shows a **grimoire** panel listing each spell with its sigil;
+Tab toggles it.
 
 ## Install
 
@@ -58,8 +62,8 @@ bin/claudemancy --demo star                # watch a cast without drawing
 ```
 
 Controls: draw with left mouse (multi-stroke is fine) · auto-casts 0.55 s after
-you lift · ⏎ cast now · ⌫ / right-click clear · Esc dismiss · any key skips the
-animation. `max_distance` in the spellbook trades forgiveness for misfires.
+you lift · ⏎ cast now · ⌫ / right-click clear · ⇥ toggle grimoire · Esc dismiss ·
+any key skips the animation. `max_distance` in the spellbook trades forgiveness for misfires.
 
 ## Portability
 
