@@ -22,6 +22,7 @@ type Spell struct {
 type Spellbook struct {
 	MaxDistance float64 `json:"max_distance,omitempty"` // higher = more forgiving, more misfires
 	Glyphs      string  `json:"glyphs,omitempty"`       // rune alphabet for the mandala bands
+	Glow        bool    `json:"glow,omitempty"`         // blocky ember background glow behind strokes
 	Spells      []Spell `json:"spells"`
 }
 

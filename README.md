@@ -61,6 +61,9 @@ bin/claudemancy --list
 bin/claudemancy --demo star                # watch a cast without drawing
 ```
 
+Set `"glow": true` in the spellbook for an ember background glow behind strokes (it renders
+as character-cell blocks, so it's off by default).
+
 Controls: draw with left mouse (multi-stroke is fine) · auto-casts 0.55 s after
 you lift · ⏎ cast now · ⌫ / right-click clear · ⇥ toggle grimoire · Esc dismiss ·
 any key skips the animation. `max_distance` in the spellbook trades forgiveness for misfires.

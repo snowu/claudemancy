@@ -150,6 +150,7 @@ func (a *App) resize() {
 		aspect = (a.term.CellH / 4) / (a.term.CellW / 2)
 	}
 	a.cv = NewCanvas(a.term.Cols, a.term.Rows, aspect)
+	a.cv.Glow = a.book.Glow
 }
 
 func (a *App) Run() {

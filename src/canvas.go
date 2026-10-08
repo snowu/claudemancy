@@ -22,6 +22,7 @@ type Canvas struct {
 	glyphFixed []bool
 	energy     []float32
 	Fizzle     float32 // 0..1 drains the palette to ash
+	Glow       bool    // ember cell backgrounds; off by default because cells render as visible blocks
 	buf        bytes.Buffer
 }
 
@@ -193,7 +194,7 @@ func (c *Canvas) Render() []byte {
 			}
 			g = min(g*0.38, 0.26) * (1 - c.Fizzle*0.7)
 			bg := -1
-			if g >= 0.05 {
+			if c.Glow && g >= 0.05 {
 				bg = int(220*g)<<16 | int(55*g)<<8 | int(6*g)
 			}
 			if bg != lastBg {
