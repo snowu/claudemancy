@@ -1,0 +1,11 @@
+{
+  "name": "claudemancy",
+  "owner": { "name": "claudemancy" },
+  "plugins": [
+    {
+      "name": "claudemancy",
+      "source": "./",
+      "description": "Draw Doctor Strange-style sigils in a terminal canvas to cast Claude skills"
+    }
+  ]
+}

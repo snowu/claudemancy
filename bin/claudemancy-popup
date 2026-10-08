@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# Opens the claudemancy canvas in the fastest overlay this environment offers,
+# waits for the cast, and prints the result JSON on stdout.
+#
+#   CLAUDEMANCY_TERMINAL  force a terminal: ghostty|kitty|foot|wezterm|alacritty
+#   CLAUDEMANCY_SIZE      popup size in px, "W H" (default: 60% x 70% of the screen)
+#   CLAUDEMANCY_TIMEOUT   seconds to wait for a cast (default 300)
+set -uo pipefail
+
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# Fresh installs ship source only; build the canvas on first use.
+if [[ ! -x $here/claudemancy ]] && ! "$here/../build.sh" >&2; then
+  echo '{"error":"could not build claudemancy (needs Go ≥1.24): run build.sh"}'
+  exit 1
+fi
+dir=$(mktemp -d "${TMPDIR:-/tmp}/claudemancy.XXXXXX")
+trap 'rm -rf "$dir"' EXIT
+fifo=$dir/result
+mkfifo "$fifo"
+
+# Passed as flags: ghostty +new-window runs the command in Ghostty's environment, not ours.
+cmd=("$here/claudemancy" --out "$fifo" --t0 "$(date +%s%N)")
+[[ -n ${CLAUDEMANCY_LATENCY_LOG:-} ]] && cmd+=(--latency-log "$CLAUDEMANCY_LATENCY_LOG")
+cmd+=("$@")
+title=claudemancy # window rules match on this, so it must stay stable
+id=dev.claudemancy.canvas
+
+pick_terminal() {
+  [[ -n ${CLAUDEMANCY_TERMINAL:-} ]] && { echo "$CLAUDEMANCY_TERMINAL"; return; }
+  # Prefer the terminal Claude Code itself runs in, so the popup matches its look.
+  case "${TERM_PROGRAM:-}:${TERM:-}" in
+    ghostty:* | *:xterm-ghostty) echo ghostty; return ;;
+    WezTerm:*) echo wezterm; return ;;
+    *:xterm-kitty) echo kitty; return ;;
+    *:foot*) echo foot; return ;;
+  esac
+  [[ -n ${ALACRITTY_WINDOW_ID:-} ]] && { echo alacritty; return; }
+  for t in ghostty kitty foot wezterm alacritty; do
+    command -v "$t" >/dev/null && { echo "$t"; return; }
+  done
+}
+
+# Floating/centred/pinned with no open animation; Hyprland's Lua API lets us
+# register the rule at runtime. Other WMs: see README for a one-line rule.
+hyprland_rule() {
+  [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]] || return 0
+  local w h
+  if [[ -n ${CLAUDEMANCY_SIZE:-} ]]; then
+    read -r w h <<<"$CLAUDEMANCY_SIZE"
+  else
+    read -r w h < <(hyprctl monitors -j | jq -r '.[] | select(.focused) | "\((.width / .scale * 0.6) | floor) \((.height / .scale * 0.7) | floor)"')
+  fi
+  hyprctl eval "if claudemancy_rule then claudemancy_rule:set_enabled(false) end; claudemancy_rule = hl.window_rule({ match = { title = \"^$title\$\" }, float = true, center = true, pin = true, no_anim = true, size = { ${w:-1100}, ${h:-700} } })" >/dev/null 2>&1
+}
+
+launch() {
+  # Inside tmux a popup overlays the current pane directly: works on any OS/WM.
+  if [[ -n ${TMUX:-} && -z ${CLAUDEMANCY_TERMINAL:-} ]]; then
+    tmux display-popup -E -B -w 85% -h 85% "$(printf '%q ' "${cmd[@]}")" &
+    return
+  fi
+  hyprland_rule
+  case $(pick_terminal) in
+    # Hand the window to the running Ghostty over D-Bus instead of cold-starting one
+    # (~900ms). Calling busctl directly is the same message `ghostty +new-window`
+    # sends, minus ~35ms of Ghostty CLI startup.
+    ghostty)
+      local args=(--title="$title" -e "${cmd[@]}")
+      if [[ $(uname) == Linux ]] && pgrep -x ghostty >/dev/null; then
+        busctl --user call -- com.mitchellh.ghostty /com/mitchellh/ghostty org.gtk.Actions Activate \
+          'sava{sv}' new-window-command 1 as "${#args[@]}" "${args[@]}" 0 ||
+          ghostty +new-window "${args[@]}"
+      else
+        setsid -f ghostty --class="$id" --title="$title" --confirm-close-surface=false -e "${cmd[@]}"
+      fi ;;
+    kitty) setsid -f kitty --single-instance --class "$id" --title "$title" -o confirm_os_window_close=0 "${cmd[@]}" ;;
+    foot) setsid -f footclient --app-id="$id" --title="$title" "${cmd[@]}" 2>/dev/null ||
+      setsid -f foot --app-id="$id" --title="$title" "${cmd[@]}" ;;
+    wezterm) setsid -f wezterm start --class "$id" -- "${cmd[@]}" ;;
+    alacritty) setsid -f alacritty --class "$id" --title "$title" -e "${cmd[@]}" ;;
+    *) echo '{"error":"no supported terminal found (set CLAUDEMANCY_TERMINAL)"}'; exit 1 ;;
+  esac >/dev/null 2>&1
+}
+
+launch
+timeout "${CLAUDEMANCY_TIMEOUT:-300}" cat "$fifo"

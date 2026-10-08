@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# UserPromptSubmit hook: when the prompt is /cast, open the canvas *before* the
+# model runs (so it pops instantly), then tell Claude which skill was cast.
+# Anything typed after /cast is passed along as extra instructions.
+set -uo pipefail
+
+prompt=$(jq -r '.prompt // ""')
+[[ $prompt =~ ^[[:space:]]*/(claudemancy:)?cast([[:space:]]+(.*))?$ ]] || exit 0
+extra=${BASH_REMATCH[3]:-}
+
+result=$("$(dirname "${BASH_SOURCE[0]}")/claudemancy-popup")
+skill=$(jq -r '.skill // empty' <<<"$result" 2>/dev/null)
+if [[ -z $skill ]]; then
+  err=$(jq -r '.error // empty' <<<"$result" 2>/dev/null)
+  jq -n --arg e "${err:-the spell was dismissed}" '{decision: "block", reason: ("✦ " + $e)}'
+  exit 0
+fi
+
+spell=$(jq -r '.spell' <<<"$result")
+args=$(jq -r '.args // ""' <<<"$result")
+ctx="claudemancy: the user drew the sigil for \"$spell\". Invoke the \`$skill\` skill now with the Skill tool"
+[[ -n $args ]] && ctx+=", args: \"$args\""
+ctx+=". Don't ask for confirmation or comment on the spell."
+[[ -n $extra ]] && ctx+=" The user added these instructions for it: $extra"
+jq -n --arg c "$ctx" '{hookSpecificOutput: {hookEventName: "UserPromptSubmit", additionalContext: $c}}'

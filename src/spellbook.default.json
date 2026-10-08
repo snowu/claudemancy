@@ -1,0 +1,11 @@
+{
+  "max_distance": 1.3,
+  "spells": [
+    { "name": "Eye of Scrutiny",   "shape": "triangle",  "skill": "code-review" },
+    { "name": "Circle of Purity",  "shape": "circle",    "skill": "simplify" },
+    { "name": "Ward of Cyttorak",  "shape": "square",    "skill": "security-review" },
+    { "name": "Star of Awakening", "shape": "star",      "skill": "run" },
+    { "name": "Bolt of Genesis",   "shape": "lightning", "skill": "init" },
+    { "name": "Seal of Passage",   "shape": "check",     "skill": "fewer-permission-prompts" }
+  ]
+}
