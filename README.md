@@ -44,28 +44,32 @@ Or from a clone, for one session: `claude --plugin-dir path/to/claudemancy`
 
 ## Spells
 
-Every spell is a plain-text `.sigil` file: a short header, then an ASCII drawing
+Every sigil is drawn in **one stroke**, without lifting the mouse, and is
+distinct enough from the others that a quick, sloppy version still casts the
+right spell. Every spell is a plain-text `.sigil` file: a short header, then an ASCII drawing
 of the sigil. Humans and agents can add a spell by adding a file.
 
 ```
-name: Ward of Cyttorak
-skill: security-review
+name: Seal of the Vishanti
+prompt: Commit the current changes, push, and open a pull request.
 ---
-######################
-#                    #
-#                    #
-######################
+##                  ##
+ ####             ###
+    ###         ###
+      ###     ###
+        #######
+           #
 ```
 
 | Draw | Spell | Casts |
 |---|---|---|
 | triangle | Eye of Scrutiny | `/code-review` |
 | circle | Circle of Purity | `/simplify` |
-| square | Ward of Cyttorak | `/security-review` |
+| M | Ward of Cyttorak | `/security-review` |
 | lightning bolt | Bolt of Genesis | `/init` |
 | check mark | Seal of Passage | `/fewer-permission-prompts` |
 | infinity | Ouroboros Loop | prompt: run the tests, fix failures, repeat |
-| `<>` | Portal of the Sling Ring | prompt: commit, push and open a pull request |
+| V | Seal of the Vishanti | prompt: commit, push and open a pull request |
 
 Spells load from three folders. A later folder overrides an earlier one by
 file name:
@@ -90,7 +94,7 @@ bin/claudemancy-cli --suggest 5          # most distinct free symbols, drawn and
 bin/claudemancy-cli --check [draft.sigil] # validate files, flag look-alike sigils
 bin/claudemancy-cli --train deploy       # draw it, ⏎ to add each drawing to your user file
 bin/claudemancy-cli --migrate            # move pre-0.3 trained spells out of spellbook.json
-bin/claudemancy --demo brackets          # watch a cast without drawing
+bin/claudemancy --demo chevron-down      # watch a cast without drawing
 ```
 
 `~/.config/claudemancy/spellbook.json` is now just settings: `glow`,

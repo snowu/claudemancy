@@ -8,8 +8,9 @@ import (
 )
 
 // symbols is a library of candidate sigils for new spells, as strokes in a
-// unit box (y down). --suggest tests each against the current spells, so
-// symbols that are already taken or easily confused drop out on their own.
+// unit box (y down). --suggest offers only the one-stroke ones and tests each
+// against the current spells, so taken or easily confused symbols drop out.
+// Multi-stroke entries stay for --demo.
 var symbols = map[string]func() []Pt{
 	"diamond":      func() []Pt { return poly(0, [][2]float64{{0.5, 0}, {1, 0.5}, {0.5, 1}, {0, 0.5}, {0.5, 0}}) },
 	"hourglass":    func() []Pt { return poly(0, [][2]float64{{0, 0}, {1, 0}, {0, 1}, {1, 1}, {0, 0}}) },
@@ -66,6 +67,16 @@ func init() {
 	}
 }
 
+// oneStroke reports whether a symbol is drawn without lifting the pen.
+func oneStroke(pts []Pt) bool {
+	for _, p := range pts {
+		if p.ID != pts[0].ID {
+			return false
+		}
+	}
+	return true
+}
+
 func symbolNames() []string {
 	names := make([]string, 0, len(symbols))
 	for n := range symbols {
@@ -107,6 +118,9 @@ const suggestTrials = 40
 func Suggest(b *Spellbook) []Suggestion {
 	var out []Suggestion
 	for _, n := range symbolNames() {
+		if !oneStroke(symbols[n]()) {
+			continue // sigils are drawn without lifting the mouse
+		}
 		d := Rasterize(symbols[n](), sigilCols, defaultAspect)
 		trial := &Spellbook{MaxDistance: b.MaxDistance, Spells: append(append([]Spell(nil), b.Spells...), Spell{ID: "candidate", Drawings: []Drawing{d}})}
 		self := len(trial.Spells) - 1

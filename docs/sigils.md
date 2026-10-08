@@ -47,6 +47,13 @@ Unknown keys are errors, so typos don't fail silently.
 
 ## Drawings
 
+- **Make it one stroke.** Every default can be drawn without lifting the mouse,
+  and `--suggest` only offers one-stroke symbols. Several strokes do work, but
+  they're slower and easier to fumble.
+- **Add drawings for the ways people actually draw it.** A V can come out wide
+  or narrow. With one drawing, a narrow V fizzled 99% of the time; with three
+  drawings (standard, wide, narrow), every variant hit 100%. See
+  `spells/ship.sigil`.
 - Any character other than a space or `.` is ink. `#` is the convention.
 - Draw about 20–24 characters wide with single-width lines, so it looks right
   in a monospace editor. Size and position don't matter, since drawings are

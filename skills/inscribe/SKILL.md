@@ -43,10 +43,11 @@ CLI="<plugin root>/bin/claudemancy-cli"
    - Project folder `<repo>/.claude/claudemancy/spells/` when the spell is for this repo or the team.
    - Never edit the plugin's built-in `spells/` in an installed plugin.
 3. **Look at what exists:** run `--list`. If the user wants to change an existing spell, note its file name. The **same file name** in your folder overrides it.
-4. **Choose the symbol.**
+4. **Choose the symbol.** It must be drawable in one stroke, without lifting the mouse, and easy to draw quickly.
    - If the user named a shape, draw it.
    - Otherwise run `--suggest 5` and offer the top two or three, showing their drawings, or take the first if the user doesn't mind.
-   - Suggestions are already checked: they are free, and recognised in at least 80% of simulated hand-drawn casts.
+   - Suggestions are already checked: they are one stroke, free, and recognised in at least 80% of simulated hand-drawn casts.
+   - Add a second or third drawing for the obvious ways people vary the shape (wider, narrower, rounder). One drawing at one proportion makes sloppy versions fizzle.
 5. **Write the file** as `<folder>/<id>.sigil`, where the id uses lowercase letters, digits and dashes (e.g. `deploy-staging`). Give it an evocative `name:`; the defaults use Doctor Strange-style names like "Ward of Cyttorak".
 6. **Run `--check`.**
    - Fix every `✗` (a broken file, or a sigil too similar to another) before finishing.
