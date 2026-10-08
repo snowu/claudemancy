@@ -47,26 +47,30 @@ func (r *Recognizer) AddTilted(spell int, pts []Pt) {
 }
 
 type Match struct {
-	Spell int
-	Dist  float64 // $P cloud distance to the best template
-	Ratio float64 // Dist / distance to the best *other* spell (0 if only one spell)
+	Spell  int
+	Second int     // runner-up spell, -1 if none
+	Dist   float64 // $P cloud distance to the best template
+	Ratio  float64 // Dist / distance to the best *other* spell (0 if only one spell)
 }
 
-// Confident rejects scribbles. Measured against the default ASCII sigils with
-// synthetic hand-drawn input vs random walks, dist < 1.22 && ratio < 0.9
-// accepts ~92% of sigils, never the wrong spell, and ~0.7% of scribbles.
+// Confident decides whether a drawing casts. The ratio (a clear margin over
+// the runner-up) is what keeps the wrong spell from casting; the distance cap
+// only stops formless scribbles. 1.4 comes from real mouse-drawn casts, which
+// land further from the ASCII templates than simulated ones: at the earlier
+// 1.22 a quarter of them fizzled as near-misses (1.33-1.35), at 1.4 none do.
+// Simulated: 99.9% of sigils cast, never the wrong spell, ~6% of random scribbles.
 func (m Match) Confident(maxDist float64) bool {
 	return m.Spell >= 0 && m.Dist < maxDist && m.Ratio < 0.9
 }
 
-const defaultMaxDistance = 1.22
+const defaultMaxDistance = 1.4
 
 // Score is a 0..1 display value (1 = perfect match).
 func (m Match) Score() float64 { return math.Min(math.Max(1.6-m.Dist, 0), 1) }
 
 func (r *Recognizer) Recognize(pts []Pt) Match {
 	if len(r.templates) == 0 || len(pts) < 2 {
-		return Match{Spell: -1}
+		return Match{Spell: -1, Second: -1}
 	}
 	cand := normalizeCloud(pts)
 	perSpell := map[int]float64{}
@@ -76,13 +80,14 @@ func (r *Recognizer) Recognize(pts []Pt) Match {
 			perSpell[t.spell] = d
 		}
 	}
-	m := Match{Spell: -1, Dist: math.Inf(1)}
+	m := Match{Spell: -1, Second: -1, Dist: math.Inf(1)}
 	second := math.Inf(1)
 	for spell, d := range perSpell {
 		if d < m.Dist {
-			second, m.Dist, m.Spell = m.Dist, d, spell
+			second, m.Second = m.Dist, m.Spell
+			m.Dist, m.Spell = d, spell
 		} else if d < second {
-			second = d
+			second, m.Second = d, spell
 		}
 	}
 	if !math.IsInf(second, 1) {

@@ -48,7 +48,7 @@ func TestScribblesAreRejected(t *testing.T) {
 		}
 	}
 	t.Logf("random scribbles accepted: %d/400", misfires)
-	if misfires > 8 {
+	if misfires > 32 { // random walks; see defaultMaxDistance
 		t.Errorf("too many scribbles accepted: %d/400", misfires)
 	}
 }

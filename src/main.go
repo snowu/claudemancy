@@ -33,6 +33,8 @@ func main() {
 	check := flag.Bool("check", false, "validate sigil files (plus any given as arguments) and warn about look-alike sigils")
 	migrate := flag.Bool("migrate", false, "move trained spells from spellbook.json into sigil files")
 	suggest := flag.Int("suggest", 0, "print the N most distinct ready-drawn symbols for a new spell")
+	replay := flag.Bool("replay", false, "re-score logged cast attempts and show how thresholds would treat them")
+	practice := flag.Bool("practice", false, "keep the canvas open after each cast, to practise the sigils")
 	t0 := flag.Int64("t0", 0, "launch timestamp (unix ns) to measure popup latency")
 	latencyLog := flag.String("latency-log", "", "append popup latency (ms) to this file")
 	flag.Parse()
@@ -59,6 +61,9 @@ func main() {
 		return
 	case *check:
 		os.Exit(Check(book, flag.Args()))
+	case *replay:
+		Replay(book)
+		return
 	case *suggest > 0:
 		PrintSuggestions(book, *suggest)
 		return
@@ -87,7 +92,7 @@ func main() {
 	}
 	app := newApp(term, book, *train, *demo)
 	app.reload = func() (*Spellbook, error) { return LoadSpellbook(*bookFlag, dirs) }
-	app.t0, app.latencyLog = *t0, *latencyLog
+	app.t0, app.latencyLog, app.practice = *t0, *latencyLog, *practice
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -120,14 +125,15 @@ const (
 type Spark struct{ x, y, vx, vy, life, max float64 }
 
 type App struct {
-	term   *Term
-	cv     *Canvas
-	pixel  bool
-	book   *Spellbook
-	reload func() (*Spellbook, error)
-	rec    *Recognizer
-	train  string
-	rng    *rand.Rand
+	term     *Term
+	cv       *Canvas
+	pixel    bool
+	book     *Spellbook
+	reload   func() (*Spellbook, error)
+	practice bool // keep the canvas open after each cast
+	rec      *Recognizer
+	train    string
+	rng      *rand.Rand
 
 	strokes     [][]Pt
 	grimoire    bool
@@ -247,6 +253,8 @@ func (a *App) handle(e Event) {
 		case e.Key == keyEsc || e.Key == 'q' || e.Key == 3:
 			a.result = Result{Cancelled: true}
 			a.st = stDone
+		case a.st == stCast && a.practice:
+			a.strokes, a.st, a.stT = nil, stDraw, 0 // any key skips the animation
 		case a.st == stCast:
 			a.st = stDone // any key skips the animation
 		case e.Key == '\t':
@@ -350,6 +358,9 @@ func (a *App) tryCast() {
 		return
 	}
 	m := a.rec.Recognize(pts)
+	if a.demo == nil && a.demoI == 0 {
+		logAttempt(a.book, pts, m)
+	}
 	if !m.Confident(a.book.MaxDistance) {
 		a.st, a.stT = stFizzle, 0
 		if m.Spell >= 0 && m.Dist < a.book.MaxDistance*1.25 {
@@ -462,7 +473,11 @@ func (a *App) update(dt float64) {
 			}
 		}
 		if a.stT >= 1.9 {
-			a.st = stDone
+			if a.practice {
+				a.strokes, a.st, a.stT = nil, stDraw, 0 // keep the canvas open for the next sigil
+			} else {
+				a.st = stDone
+			}
 		}
 	}
 }
@@ -549,7 +564,11 @@ func (a *App) draw() {
 	if a.train != "" {
 		c.Text(1, 0, "✦ inscribing "+a.train+"  ·  draw the sigil  ·  ⏎ save  ·  ⌫ clear  ·  ⇥ grimoire  ·  esc done", hud)
 	} else if a.st != stCast {
-		c.Text(1, 0, "✦ claudemancy  ·  draw a sigil  ·  ⌫ clear  ·  ⇥ grimoire  ·  esc dismiss", hud)
+		mode := "claudemancy"
+		if a.practice {
+			mode = "practice"
+		}
+		c.Text(1, 0, "✦ "+mode+"  ·  draw a sigil  ·  ⌫ clear  ·  ⇥ grimoire  ·  esc dismiss", hud)
 	}
 	if a.latency != "" && a.now < 2.5 {
 		c.Text(c.Cols-len([]rune(a.latency))-1, c.Rows-1, a.latency, hud)

@@ -95,6 +95,8 @@ bin/claudemancy-cli --check [draft.sigil] # validate files, flag look-alike sigi
 bin/claudemancy-cli --train deploy       # draw it, ⏎ to add each drawing to your user file
 bin/claudemancy-cli --migrate            # move pre-0.3 trained spells out of spellbook.json
 bin/claudemancy --demo chevron-down      # watch a cast without drawing
+bin/claudemancy-popup --practice         # canvas stays open: practise the sigils
+bin/claudemancy-cli --replay             # re-score your logged casts at different strictness
 ```
 
 `~/.config/claudemancy/spellbook.json` is now just settings: `glow`,
@@ -108,7 +110,8 @@ plain lines.
 Controls: draw with left mouse (multi-stroke is fine) · auto-casts 0.55 s after
 you lift · ⏎ cast now · ⌫ / right-click clear · ⇥ toggle grimoire · Esc dismiss ·
 any key skips the animation. `max_distance` in spellbook.json trades forgiveness
-for misfires (default 1.22).
+for misfires (default 1.4; a clear margin over the runner-up is what stops
+wrong-spell casts, so raising it mostly lets messier drawings through).
 
 ## Portability
 

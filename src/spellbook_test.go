@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"strings"
@@ -110,4 +111,21 @@ func TestMigrateLegacySpellbook(t *testing.T) {
 	if len(b.Spells) != 1 || b.Spells[0].Source != "user" {
 		t.Fatalf("after migrate: %+v", b.Spells)
 	}
+}
+
+func TestAttemptLogAndReplay(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	spells, _ := LoadSpellDirs([]SpellDir{{"../spells", "built-in"}})
+	b := &Spellbook{MaxDistance: defaultMaxDistance, Spells: spells}
+	pts := wobble(shapes["circle"](), rand.New(rand.NewPCG(1, 1)))
+	logAttempt(b, pts, b.Recognizer().Recognize(pts))
+	data, err := os.ReadFile(attemptLogPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var a Attempt
+	if err := json.Unmarshal(data, &a); err != nil || a.Best != "simplify" || !a.Cast || len(a.Pts) != len(pts) {
+		t.Fatalf("logged %s (%v)", data, err)
+	}
+	Replay(b) // must re-read and re-score without panicking
 }

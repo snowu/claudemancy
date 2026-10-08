@@ -111,12 +111,22 @@ calibrated by casting synthetic hand-drawn shapes:
 Fix a `✗` by making one sigil more distinct. For a `⚠`, a second drawing of
 whichever spell gets mixed up usually helps.
 
+## Strictness and your own casts
+
+Every cast attempt is logged locally to `~/.local/state/claudemancy/attempts.jsonl`
+(your strokes and how close they came to each spell). `bin/claudemancy-cli --replay`
+re-scores them against the current spells and shows how many would cast at
+each `max_distance`. If real casts fizzle as near-misses, raise `max_distance`
+in `~/.config/claudemancy/spellbook.json`. The default of 1.4 was set from
+real mouse-drawn casts.
+
 ## Recognition quality
 
 `src/sigil_test.go` casts 100 simulated hand-drawn versions of each default and
-1000 random scribbles against the shipped files. Every default lands
-95–100% confident and correct, no attempt is cast as the wrong spell, and
-about 0.5% of scribbles are accepted. Run it after changing a default:
+1000 random scribbles against the shipped files. Every default lands at least
+95% confident and correct, no attempt is cast as the wrong spell, and around
+6% of pure random scribbles are accepted (the price of forgiving real, messy
+casts). Run it after changing a default:
 
 ```sh
 go test ./src -run DefaultSpells -v

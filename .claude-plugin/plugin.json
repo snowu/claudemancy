@@ -1,6 +1,6 @@
 {
   "name": "claudemancy",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Draw Doctor Strange-style sigils in a terminal canvas to cast Claude skills",
   "keywords": ["skills", "tui", "gestures"]
 }
