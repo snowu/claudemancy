@@ -61,9 +61,10 @@ bin/claudemancy --list
 bin/claudemancy --demo star                # watch a cast without drawing
 ```
 
-Glow: `"glow": "soft"` (default) puts an ember glow behind every stroke and ring
-while sparks fly as bare points; `"full"` also bleeds into neighbouring cells
-(richer, but shows character-cell blocks); `"off"` is plain lines.
+Glow: `"glow": "soft"` (default) scatters a shimmering halo of ember dots beside
+every line, with no cell backgrounds, so nothing renders as boxes; `"full"` adds
+ember cell backgrounds (warmer, but shows character-cell blocks); `"off"` is
+plain lines.
 
 Controls: draw with left mouse (multi-stroke is fine) · auto-casts 0.55 s after
 you lift · ⏎ cast now · ⌫ / right-click clear · ⇥ toggle grimoire · Esc dismiss ·

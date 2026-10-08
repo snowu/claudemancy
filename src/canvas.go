@@ -23,6 +23,7 @@ type Canvas struct {
 	glyphFixed []bool
 	energy     []float32
 	Fizzle     float32 // 0..1 drains the palette to ash
+	rng        uint32  // xorshift state for the halo shimmer
 	Glow       GlowMode
 	buf        bytes.Buffer
 }
@@ -175,11 +176,43 @@ func (c *Canvas) cellBits(cx, cy int) (rune, float32) {
 	return bits, peak
 }
 
+// halo scatters dim ember dots beside every line dot, re-rolled each frame.
+// It reads as glow and shimmer at dot resolution, so it never shows cell edges.
+func (c *Canvas) halo() {
+	if c.rng == 0 {
+		c.rng = 0x9e3779b9
+	}
+	for y := 0; y < c.DH; y++ {
+		for x := 0; x < c.DW; x++ {
+			v := c.L[y*c.DW+x]
+			if v < 0.3 {
+				continue
+			}
+			for _, d := range [8][2]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {1, -1}, {-1, 1}, {1, 1}} {
+				c.rng ^= c.rng << 13
+				c.rng ^= c.rng >> 17
+				c.rng ^= c.rng << 5
+				if c.rng%100 >= 14 {
+					continue
+				}
+				nx, ny := x+d[0], y+d[1]
+				if nx >= 0 && ny >= 0 && nx < c.DW && ny < c.DH {
+					i := ny*c.DW + nx
+					c.I[i] = max(c.I[i], v*0.24)
+				}
+			}
+		}
+	}
+}
+
 // Render serialises the frame into one synchronized-output write.
 func (c *Canvas) Render() []byte {
 	w := &c.buf
 	w.Reset()
 	w.WriteString("\x1b[?2026h")
+	if c.Glow != GlowOff {
+		c.halo()
+	}
 
 	for cy := 0; cy < c.Rows; cy++ {
 		for cx := 0; cx < c.Cols; cx++ {
@@ -201,16 +234,11 @@ func (c *Canvas) Render() []byte {
 			i := cy*c.Cols + cx
 			bits, peak := c.cellBits(cx, cy)
 
-			// Bloom: an ember-coloured cell background. Soft mode only lights cells
-			// that hold stroke dots, so empty space never shows cell-shaped blocks;
-			// full mode also blurs into neighbours for a wider (blockier) halo.
+			// Bloom: full mode adds an ember-coloured cell background blurred into
+			// neighbours. Soft mode skips it (cells show as blocks) and relies on
+			// the dot halo alone.
 			var g float32
-			// Only cells a line passes through glow; sparks stay bare points of
-			// light instead of each dragging a cell-sized block along.
-			heated := c.energy[i] > 0.04 || (c.glyph[i] != 0 && !c.glyphFixed[i])
 			switch {
-			case c.Glow == GlowSoft && heated:
-				g = min(c.energy[i]*0.45+c.glyphV[i]*0.12*b2f(c.glyph[i] != 0), 0.28)
 			case c.Glow == GlowFull:
 				g = c.energy[i] * 0.4
 				for _, d := range [][3]int{{-1, 0, 12}, {1, 0, 12}, {0, -1, 12}, {0, 1, 12}, {-1, -1, 3}, {1, -1, 3}, {-1, 1, 3}, {1, 1, 3}} {
@@ -256,13 +284,6 @@ func (c *Canvas) Render() []byte {
 	}
 	w.WriteString("\x1b[?2026l")
 	return w.Bytes()
-}
-
-func b2f(b bool) float32 {
-	if b {
-		return 1
-	}
-	return 0
 }
 
 func rgbInt(c RGB) int { return int(c.R)<<16 | int(c.G)<<8 | int(c.B) }

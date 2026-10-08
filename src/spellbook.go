@@ -90,8 +90,8 @@ func (b *Spellbook) Recognizer() *Recognizer {
 type GlowMode int
 
 const (
-	GlowSoft GlowMode = iota // only behind cells that hold strokes
-	GlowFull                 // also bleeds into neighbouring cells
+	GlowSoft GlowMode = iota // shimmering dot halo beside lines, no cell backgrounds
+	GlowFull                 // dot halo plus ember cell backgrounds (blocky)
 	GlowOff
 )
 
