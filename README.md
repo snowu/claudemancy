@@ -67,7 +67,7 @@ prompt: Commit the current changes, push, and open a pull request.
 | circle | Circle of Purity | `/simplify` |
 | M | Ward of Cyttorak | `/security-review` |
 | lightning bolt | Bolt of Genesis | `/init` |
-| check mark | Seal of Passage | `/fewer-permission-prompts` |
+| S | Seal of Passage | `/fewer-permission-prompts` |
 | infinity | Ouroboros Loop | prompt: run the tests, fix failures, repeat |
 | V | Seal of the Vishanti | prompt: commit, push and open a pull request |
 

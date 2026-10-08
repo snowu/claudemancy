@@ -63,7 +63,7 @@ func TestDefaultSpellsRecognise(t *testing.T) {
 	r := b.Recognizer()
 	shapeOf := map[string]string{
 		"code-review": "triangle", "simplify": "circle", "security-review": "m",
-		"init": "lightning", "fewer-permission-prompts": "check", "test-loop": "infinity", "ship": "chevron-down",
+		"init": "lightning", "fewer-permission-prompts": "s", "test-loop": "infinity", "ship": "chevron-down",
 	}
 	if len(spells) != len(shapeOf) {
 		t.Fatalf("loaded %d default spells, test knows %d", len(spells), len(shapeOf))
@@ -120,7 +120,7 @@ func TestSuggestOffersOnlyFreeDistinctSymbols(t *testing.T) {
 		}
 		// Shapes the defaults already use must never come back.
 		switch s.Symbol {
-		case "triangle", "circle", "m", "lightning", "check", "infinity", "chevron-down":
+		case "triangle", "circle", "m", "lightning", "s", "infinity", "chevron-down":
 			t.Errorf("suggested %s, which a default spell already uses", s.Symbol)
 		}
 		// A suggestion pasted into a file must parse and pass --check.

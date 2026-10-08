@@ -56,6 +56,45 @@ func (d Drawing) Points() []Pt {
 	return pts
 }
 
+// Segments draws the ASCII art as it is: a short segment from every ink cell
+// to each neighbouring one (bridging one-cell gaps), as pairs of points that
+// share an ID. Previews use this rather than Strokes, so they show exactly
+// what is in the file instead of what the tracer made of it.
+func (d Drawing) Segments() []Pt {
+	ink := map[[2]int]bool{}
+	var cells [][2]int
+	for r, line := range d.Lines {
+		for c, ch := range []rune(line) {
+			if isInk(ch) {
+				ink[[2]int{c, r}] = true
+				cells = append(cells, [2]int{c, r})
+			}
+		}
+	}
+	var out []Pt
+	link := func(a, b [2]int) {
+		id := len(out) / 2
+		out = append(out, Pt{float64(a[0]), float64(a[1]) * d.Aspect, id}, Pt{float64(b[0]), float64(b[1]) * d.Aspect, id})
+	}
+	for _, p := range cells {
+		linked := false
+		for _, dd := range [][2]int{{1, 0}, {-1, 1}, {0, 1}, {1, 1}} {
+			if q := [2]int{p[0] + dd[0], p[1] + dd[1]}; ink[q] {
+				link(p, q)
+				linked = true
+			}
+		}
+		if !linked { // "# # #" style gaps
+			for _, dd := range [][2]int{{2, 0}, {-2, 1}, {2, 1}} {
+				if q := [2]int{p[0] + dd[0], p[1] + dd[1]}; ink[q] {
+					link(p, q)
+				}
+			}
+		}
+	}
+	return out
+}
+
 // Strokes traces the drawing's ink into polylines, so a file is matched with
 // exactly the same pipeline as a drawn stroke. It walks from line ends through
 // neighbouring ink, prefers to carry straight on at crossings, and bridges
