@@ -126,6 +126,7 @@ type App struct {
 	fromX, fromY, fromR float64
 	toX, toY, toR       float64
 	burst               bool
+	rimAcc              float64 // fractional rim sparks carried between frames
 	result              Result
 }
 
@@ -277,13 +278,18 @@ func (a *App) addPoint(x, y float64) {
 	}
 }
 
+const maxSparks = 3000
+
 func (a *App) spark(x, y, speed, life float64) {
+	if len(a.sparks) >= maxSparks {
+		return
+	}
 	ang := a.rng.Float64() * 2 * math.Pi
 	a.sparkV(x, y, math.Cos(ang)*speed, math.Sin(ang)*speed, life)
 }
 
 func (a *App) sparkV(x, y, vx, vy, life float64) {
-	if len(a.sparks) < 3000 {
+	if len(a.sparks) < maxSparks {
 		a.sparks = append(a.sparks, Spark{x, y, vx, vy, life, life})
 	}
 }
@@ -339,7 +345,7 @@ func (a *App) tryCast() {
 	w, h := a.cv.WorldW(), a.cv.WorldH()
 	a.toX, a.toY = w/2, h/2-4*a.cv.Aspect // leave room for the label below
 	a.toR = math.Min(w/2*0.92, h/2-4*a.cv.Aspect*2.5)
-	a.st, a.stT, a.burst = stCast, 0, false
+	a.st, a.stT, a.burst, a.rimAcc = stCast, 0, false, 0
 }
 
 func (a *App) inscribe() {
@@ -407,9 +413,11 @@ func (a *App) update(dt float64) {
 	case stCast:
 		// The spinning rim sheds sparks tangentially, like a sling-ring portal.
 		if a.stT > 0.3 && a.stT < 1.3 {
-			for range int(dt*260) + 1 {
+			cx, cy, R, _ := a.ring(a.stT)
+			a.rimAcc += dt * 260 // steady sparks/s regardless of frame timing
+			for ; a.rimAcc >= 1; a.rimAcc-- {
 				ang := a.rng.Float64() * 2 * math.Pi
-				x, y := a.toX+a.toR*math.Cos(ang), a.toY+a.toR*math.Sin(ang)
+				x, y := cx+R*math.Cos(ang), cy+R*math.Sin(ang)
 				sp := 45 + a.rng.Float64()*70
 				out := 8 + a.rng.Float64()*20
 				a.sparkV(x, y, -math.Sin(ang)*sp+math.Cos(ang)*out, math.Cos(ang)*sp+math.Sin(ang)*out, 0.2+a.rng.Float64()*0.35)
@@ -425,6 +433,24 @@ func (a *App) update(dt float64) {
 			a.st = stDone
 		}
 	}
+}
+
+// ring is the mandala's centre, radius and brightness t seconds into the cast:
+// it grows out of the stroke, spins, then collapses white-hot.
+func (a *App) ring(t float64) (cx, cy, R float64, v float32) {
+	k := 1 - math.Pow(1-clamp01(t/0.4), 3)
+	cx, cy = a.fromX+(a.toX-a.fromX)*k, a.fromY+(a.toY-a.fromY)*k
+	R = a.fromR + (a.toR-a.fromR)*k
+	v = float32(k)
+	if t > 0.4 {
+		v = float32(1 + 0.1*math.Sin(t*9))
+	}
+	if t > 1.15 {
+		k2 := math.Pow(clamp01((t-1.15)/0.3), 3)
+		R *= 1 - k2
+		v = float32(1 + 0.5*k2)
+	}
+	return
 }
 
 func clamp01(v float64) float64 { return math.Min(math.Max(v, 0), 1) }
@@ -445,7 +471,7 @@ func (a *App) draw() {
 		for _, s := range a.strokes {
 			for i := 1; i < len(s); i++ {
 				v := float32(alpha * (0.88 + 0.12*math.Sin(a.now*18+float64(i)*0.45)))
-				if a.rng.Float64() < 0.03 {
+				if a.st != stFizzle && a.rng.Float64() < 0.03 {
 					v = float32(alpha * 1.45) // twinkle white-hot
 				}
 				c.Line(s[i-1].X, s[i-1].Y, s[i].X, s[i].Y, v)
@@ -468,18 +494,7 @@ func (a *App) draw() {
 
 	if a.st == stCast {
 		t := a.stT
-		k := 1 - math.Pow(1-clamp01(t/0.4), 3)
-		cx, cy := a.fromX+(a.toX-a.fromX)*k, a.fromY+(a.toY-a.fromY)*k
-		R := a.fromR + (a.toR-a.fromR)*k
-		v := float32(k)
-		if t > 0.4 {
-			v = float32(1 + 0.1*math.Sin(t*9))
-		}
-		if t > 1.15 {
-			k2 := math.Pow(clamp01((t-1.15)/0.3), 3)
-			R *= 1 - k2
-			v = float32(1 + 0.5*k2)
-		}
+		cx, cy, R, v := a.ring(t)
 		if t < 1.45 {
 			a.mandala.Draw(c, cx, cy, R, t, v)
 		}

@@ -4,9 +4,9 @@ import (
 	_ "embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 //go:embed spellbook.default.json
@@ -97,19 +97,29 @@ const (
 
 // UnmarshalJSON accepts "soft"/"full"/"off", and true/false from 0.2.1 configs.
 func (g *GlowMode) UnmarshalJSON(b []byte) error {
-	switch strings.Trim(string(b), `"`) {
-	case "full", "true":
+	switch string(b) {
+	case `"soft"`, `""`, "null":
+		*g = GlowSoft
+	case `"full"`, "true":
 		*g = GlowFull
-	case "off", "false", "none":
+	case `"off"`, "false":
 		*g = GlowOff
 	default:
-		*g = GlowSoft
+		return fmt.Errorf(`glow must be "soft", "full" or "off", got %s`, b)
 	}
 	return nil
 }
 
 func (g GlowMode) MarshalJSON() ([]byte, error) {
-	return json.Marshal([]string{"soft", "full", "off"}[g])
+	switch g {
+	case GlowSoft:
+		return []byte(`"soft"`), nil
+	case GlowFull:
+		return []byte(`"full"`), nil
+	case GlowOff:
+		return []byte(`"off"`), nil
+	}
+	return nil, fmt.Errorf("invalid glow mode %d", int(g))
 }
 
 // templatePts decodes a stored [x, y, stroke] template.
