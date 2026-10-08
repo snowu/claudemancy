@@ -137,6 +137,23 @@ func (c *Canvas) heat(v float32) RGB {
 
 var brailleBit = [4][2]rune{{0x01, 0x08}, {0x02, 0x10}, {0x04, 0x20}, {0x40, 0x80}}
 
+// cellBits returns the Braille dot pattern of a cell and its brightest dot.
+func (c *Canvas) cellBits(cx, cy int) (rune, float32) {
+	var bits rune
+	var peak float32
+	for dy := 0; dy < 4; dy++ {
+		row := (cy*4 + dy) * c.DW
+		for dx := 0; dx < 2; dx++ {
+			v := c.I[row+cx*2+dx]
+			if v > 0.08 {
+				bits |= brailleBit[dy][dx]
+			}
+			peak = max(peak, v)
+		}
+	}
+	return bits, peak
+}
+
 // Render serialises the frame into one synchronized-output write.
 func (c *Canvas) Render() []byte {
 	w := &c.buf
@@ -161,18 +178,7 @@ func (c *Canvas) Render() []byte {
 		w.WriteString(";1H")
 		for cx := 0; cx < c.Cols; cx++ {
 			i := cy*c.Cols + cx
-			var bits rune
-			var peak float32
-			for dy := 0; dy < 4; dy++ {
-				row := (cy*4 + dy) * c.DW
-				for dx := 0; dx < 2; dx++ {
-					v := c.I[row+cx*2+dx]
-					if v > 0.08 {
-						bits |= brailleBit[dy][dx]
-					}
-					peak = max(peak, v)
-				}
-			}
+			bits, peak := c.cellBits(cx, cy)
 
 			// Bloom: blur the cell energy into an ember-coloured background.
 			g := c.energy[i] * 0.4

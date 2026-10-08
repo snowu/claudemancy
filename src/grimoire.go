@@ -14,13 +14,18 @@ func (b *Spellbook) Sigil(i int) []Pt {
 		return gen()
 	}
 	if len(s.Templates) > 0 {
-		pts := make([]Pt, len(s.Templates[0]))
-		for j, p := range s.Templates[0] {
-			pts[j] = Pt{p[0], p[1], int(p[2])}
-		}
-		return pts
+		return templatePts(s.Templates[0])
 	}
 	return nil
+}
+
+// Sigils returns every spell's sigil, for callers that redraw them each frame.
+func (b *Spellbook) Sigils() [][]Pt {
+	out := make([][]Pt, len(b.Spells))
+	for i := range b.Spells {
+		out[i] = b.Sigil(i)
+	}
+	return out
 }
 
 func (s Spell) Invocation() string {
@@ -53,9 +58,14 @@ func drawSigil(c *Canvas, pts []Pt, x, y, w, h float64, v float32) {
 
 const grimoireCols = 34
 
+func grimoireFits(c *Canvas) bool { return c.Cols >= grimoireCols*2 && c.Rows >= 8 }
+
+// grimoireLeft is the panel's left edge in world units.
+func grimoireLeft(c *Canvas) float64 { return float64((c.Cols - grimoireCols) * 2) }
+
 // drawGrimoire lists the spellbook down the right edge: sigil, name, invocation.
-func drawGrimoire(c *Canvas, b *Spellbook) {
-	if c.Cols < grimoireCols*2 || c.Rows < 8 {
+func drawGrimoire(c *Canvas, b *Spellbook, sigils [][]Pt) {
+	if !grimoireFits(c) {
 		return
 	}
 	col0 := c.Cols - grimoireCols
@@ -65,12 +75,12 @@ func drawGrimoire(c *Canvas, b *Spellbook) {
 	row := 4
 	for i, s := range b.Spells {
 		if row+3 > c.Rows-1 {
-			c.Text(col0, row, fmt.Sprintf("… %d more (claudemancy --list)", len(b.Spells)-i), dim)
+			c.Text(col0, row, fmt.Sprintf("… %d more (/spells)", len(b.Spells)-i), dim)
 			break
 		}
 		// 5x3-cell sigil box, inset by a dot so strokes don't touch the edge.
 		x, y := float64(col0*2)+1, float64(row*4)*c.Aspect+1
-		drawSigil(c, b.Sigil(i), x, y, 8, 12*c.Aspect-2, 0.3)
+		drawSigil(c, sigils[i], x, y, 8, 12*c.Aspect-2, 0.3)
 		c.Text(col0+6, row, truncate(s.Name, grimoireCols-7), title)
 		c.Text(col0+6, row+1, truncate(s.Invocation(), grimoireCols-7), dim)
 		row += 4
@@ -91,14 +101,7 @@ func (c *Canvas) Plain() []string {
 	for cy := 0; cy < c.Rows; cy++ {
 		var sb strings.Builder
 		for cx := 0; cx < c.Cols; cx++ {
-			var bits rune
-			for dy := 0; dy < 4; dy++ {
-				for dx := 0; dx < 2; dx++ {
-					if c.I[(cy*4+dy)*c.DW+cx*2+dx] > 0.08 {
-						bits |= brailleBit[dy][dx]
-					}
-				}
-			}
+			bits, _ := c.cellBits(cx, cy)
 			sb.WriteRune(0x2800 + bits)
 		}
 		lines[cy] = sb.String()

@@ -6,11 +6,23 @@
 #   CLAUDEMANCY_SIZE      popup size in px, "W H" (default: 60% x 70% of the screen)
 #   CLAUDEMANCY_TIMEOUT   seconds to wait for a cast (default 300)
 set -uo pipefail
+t0=${EPOCHREALTIME/[.,]/}000 # launch time in ns, without forking `date`
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-# Fresh installs ship source only; build the canvas on first use.
-if ! "$here/../build.sh" --if-missing >&2; then
-  echo '{"error":"could not build claudemancy (needs Go ≥1.24): run build.sh"}'
+bin=$here/claudemancy
+
+# Installs ship source only, and updates bring new sources: (re)build when the
+# binary is missing or stale. Pure bash tests, so the common case costs no fork.
+needs_build() {
+  [[ -x $bin ]] || return 0
+  local f
+  for f in "$here"/../src/*.go "$here"/../src/*.json "$here/../go.mod"; do
+    [[ $f -nt $bin ]] && return 0
+  done
+  return 1
+}
+if needs_build && ! "$here/../build.sh" >&2; then
+  echo '{"error":"could not build claudemancy (needs Go ≥1.24): run build.sh in the plugin folder"}'
   exit 1
 fi
 dir=$(mktemp -d "${TMPDIR:-/tmp}/claudemancy.XXXXXX")
@@ -19,7 +31,7 @@ fifo=$dir/result
 mkfifo "$fifo"
 
 # Passed as flags: ghostty +new-window runs the command in Ghostty's environment, not ours.
-cmd=("$here/claudemancy" --out "$fifo" --t0 "$(date +%s%N)")
+cmd=("$bin" --out "$fifo" --t0 "$t0")
 [[ -n ${CLAUDEMANCY_LATENCY_LOG:-} ]] && cmd+=(--latency-log "$CLAUDEMANCY_LATENCY_LOG")
 cmd+=("$@")
 title=claudemancy # window rules match on this, so it must stay stable

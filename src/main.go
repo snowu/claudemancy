@@ -106,6 +106,7 @@ type App struct {
 
 	strokes     [][]Pt
 	grimoire    bool
+	sigils      [][]Pt // cached for the grimoire panel
 	drawing     bool
 	lastRelease float64
 	sparks      []Spark
@@ -131,7 +132,7 @@ type App struct {
 func newApp(t *Term, book *Spellbook, path, train, demo string) *App {
 	a := &App{term: t, book: book, bookPath: path, rec: book.Recognizer(), train: train,
 		rng: rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 7)), result: Result{Cancelled: true},
-		grimoire: demo == ""}
+		grimoire: demo == "", sigils: book.Sigils()}
 	a.resize()
 	if demo != "" {
 		w, h := a.cv.WorldW(), a.cv.WorldH()
@@ -220,6 +221,9 @@ func (a *App) handle(e Event) {
 			a.st = stDone // any key skips the animation
 		case e.Key == '\t':
 			a.grimoire = !a.grimoire
+			if a.grimoire && !grimoireFits(a.cv) {
+				a.say("the window is too small for the grimoire — try /spells", 2)
+			}
 		case e.Key == '\r' && a.train != "":
 			a.inscribe()
 		case e.Key == '\r':
@@ -280,6 +284,17 @@ func (a *App) spark(x, y, speed, life float64) {
 	a.sparks = append(a.sparks, Spark{x, y, math.Cos(ang) * speed, math.Sin(ang) * speed, life, life})
 }
 
+func (a *App) strokesReach(wx float64) bool {
+	for _, s := range a.strokes {
+		for _, p := range s {
+			if p.X >= wx-2 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (a *App) points() []Pt {
 	var pts []Pt
 	for _, s := range a.strokes {
@@ -333,7 +348,7 @@ func (a *App) inscribe() {
 		a.say("could not save: "+err.Error(), 3)
 		return
 	}
-	a.rec = a.book.Recognizer()
+	a.rec, a.sigils = a.book.Recognizer(), a.book.Sigils()
 	for _, p := range pts {
 		a.spark(p.X, p.Y, 10+a.rng.Float64()*30, 0.3+a.rng.Float64()*0.4)
 	}
@@ -455,17 +470,15 @@ func (a *App) draw() {
 			row := int((a.toY+a.toR)/c.Aspect/4) + 1
 			col := c.heat(min(v, 1.1))
 			title := "⟡  " + a.spell.Name + "  ⟡"
-			sub := "/" + a.spell.Skill
-			if a.spell.Args != "" {
-				sub += " " + a.spell.Args
-			}
+			sub := a.spell.Invocation()
 			c.Text((c.Cols-len([]rune(title)))/2, min(row, c.Rows-2), title, col)
 			c.Text((c.Cols-len([]rune(sub)))/2, min(row+1, c.Rows-1), sub, RGB{col.R / 2, col.G / 2, col.B / 2})
 		}
 	}
 
-	if a.grimoire && a.st != stCast {
-		drawGrimoire(c, a.book)
+	// The panel steps aside while a sigil reaches into it, so it never hides strokes.
+	if a.grimoire && a.st != stCast && !a.strokesReach(grimoireLeft(c)) {
+		drawGrimoire(c, a.book, a.sigils)
 	}
 
 	hud := RGB{150, 68, 18}
@@ -475,7 +488,7 @@ func (a *App) draw() {
 		c.Text(1, 0, "✦ claudemancy  ·  draw a sigil  ·  ⌫ clear  ·  ⇥ grimoire  ·  esc dismiss", hud)
 	}
 	if a.latency != "" && a.now < 2.5 {
-		c.Text(c.Cols-len([]rune(a.latency))-1, 0, a.latency, hud)
+		c.Text(c.Cols-len([]rune(a.latency))-1, c.Rows-1, a.latency, hud)
 	}
 	if a.now < a.msgUntil {
 		c.Text((c.Cols-len([]rune(a.msg)))/2, c.Rows-1, a.msg, RGB{200, 110, 40})

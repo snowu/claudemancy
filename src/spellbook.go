@@ -77,14 +77,19 @@ func (b *Spellbook) Recognizer() *Recognizer {
 			r.AddTilted(i, gen())
 		}
 		for _, t := range s.Templates {
-			pts := make([]Pt, len(t))
-			for j, p := range t {
-				pts[j] = Pt{p[0], p[1], int(p[2])}
-			}
-			r.Add(i, pts)
+			r.Add(i, templatePts(t))
 		}
 	}
 	return r
+}
+
+// templatePts decodes a stored [x, y, stroke] template.
+func templatePts(t [][3]float64) []Pt {
+	pts := make([]Pt, len(t))
+	for i, p := range t {
+		pts[i] = Pt{p[0], p[1], int(p[2])}
+	}
+	return pts
 }
 
 // Inscribe stores a trained template under the spell named name, creating the

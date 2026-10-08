@@ -21,5 +21,6 @@ args=$(jq -r '.args // ""' <<<"$result")
 ctx="claudemancy: the user drew the sigil for \"$spell\". Invoke the \`$skill\` skill now with the Skill tool"
 [[ -n $args ]] && ctx+=", args: \"$args\""
 ctx+=". Don't ask for confirmation or comment on the spell."
+ctx+=" Guard: if a \`$skill\` run started earlier in this session is still in progress (you have not yet received its completion notification), do not start another; reply only that $spell is still being cast."
 [[ -n $extra ]] && ctx+=" The user added these instructions for it: $extra"
 jq -n --arg c "$ctx" '{hookSpecificOutput: {hookEventName: "UserPromptSubmit", additionalContext: $c}}'
