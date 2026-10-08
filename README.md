@@ -62,11 +62,10 @@ skill: security-review
 | triangle | Eye of Scrutiny | `/code-review` |
 | circle | Circle of Purity | `/simplify` |
 | square | Ward of Cyttorak | `/security-review` |
-| star | Star of Awakening | `/run` |
 | lightning bolt | Bolt of Genesis | `/init` |
 | check mark | Seal of Passage | `/fewer-permission-prompts` |
 | infinity | Ouroboros Loop | prompt: run the tests, fix failures, repeat |
-| X | Seal of Binding | prompt: commit the current work (no push) |
+| `<>` | Portal of the Sling Ring | prompt: commit, push and open a pull request |
 
 Spells load from three folders. A later folder overrides an earlier one by
 file name:
@@ -91,7 +90,7 @@ bin/claudemancy-cli --suggest 5          # most distinct free symbols, drawn and
 bin/claudemancy-cli --check [draft.sigil] # validate files, flag look-alike sigils
 bin/claudemancy-cli --train deploy       # draw it, ⏎ to add each drawing to your user file
 bin/claudemancy-cli --migrate            # move pre-0.3 trained spells out of spellbook.json
-bin/claudemancy --demo star              # watch a cast without drawing
+bin/claudemancy --demo brackets          # watch a cast without drawing
 ```
 
 `~/.config/claudemancy/spellbook.json` is now just settings: `glow`,

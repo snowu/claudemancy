@@ -1,0 +1,22 @@
+name: Portal of the Sling Ring
+prompt: Commit the current changes with a concise message that explains why, staging only files related to the work we did. Then push the branch and open a pull request with a short title and a summary of the changes. If we're on the default branch, create a feature branch first. If a pull request already exists for this branch, just push and share its link.
+---
+          ##    ##
+        ##        ##
+      ##            ##
+    ##                ##
+  ##                    ##
+    ##                ##
+      ##            ##
+        ##        ##
+          ##    ##
+---
+           ##
+         ##  ##
+       ##      ##
+     ##          ##
+   ##              ##
+     ##          ##
+       ##      ##
+         ##  ##
+           ##

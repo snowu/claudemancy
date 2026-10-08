@@ -49,6 +49,9 @@ var symbols = map[string]func() []Pt{
 		}
 		return append(outer, inner...)
 	},
+	"brackets": func() []Pt { // <>
+		return append(poly(0, [][2]float64{{0.45, 0}, {0, 0.5}, {0.45, 1}}), poly(1, [][2]float64{{0.55, 0}, {1, 0.5}, {0.55, 1}})...)
+	},
 	"bowtie": func() []Pt { return poly(0, [][2]float64{{0, 0}, {1, 1}, {1, 0}, {0, 1}, {0, 0}}) },
 	"trident": func() []Pt {
 		return append(poly(0, [][2]float64{{0, 0}, {0, 0.4}, {1, 0.4}, {1, 0}}),

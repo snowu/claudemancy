@@ -62,8 +62,8 @@ func TestDefaultSpellsRecognise(t *testing.T) {
 	b := &Spellbook{Spells: spells}
 	r := b.Recognizer()
 	shapeOf := map[string]string{
-		"code-review": "triangle", "simplify": "circle", "security-review": "square", "run": "star",
-		"init": "lightning", "fewer-permission-prompts": "check", "test-loop": "infinity", "commit": "cross",
+		"code-review": "triangle", "simplify": "circle", "security-review": "square",
+		"init": "lightning", "fewer-permission-prompts": "check", "test-loop": "infinity", "ship": "brackets",
 	}
 	if len(spells) != len(shapeOf) {
 		t.Fatalf("loaded %d default spells, test knows %d", len(spells), len(shapeOf))
@@ -73,7 +73,7 @@ func TestDefaultSpellsRecognise(t *testing.T) {
 	for i, s := range spells {
 		hits := 0
 		for range trials {
-			if m := r.Recognize(wobble(shapes[shapeOf[s.ID]](), rng)); m.Spell == i && m.Confident(defaultMaxDistance) {
+			if m := r.Recognize(wobble(symbols[shapeOf[s.ID]](), rng)); m.Spell == i && m.Confident(defaultMaxDistance) {
 				hits++
 			} else if m.Confident(defaultMaxDistance) {
 				t.Errorf("a %s was cast as %s", shapeOf[s.ID], spells[m.Spell].ID)
@@ -120,7 +120,7 @@ func TestSuggestOffersOnlyFreeDistinctSymbols(t *testing.T) {
 		}
 		// Shapes the defaults already use must never come back.
 		switch s.Symbol {
-		case "triangle", "circle", "square", "star", "lightning", "check", "cross", "infinity":
+		case "triangle", "circle", "square", "lightning", "check", "infinity", "brackets", "diamond":
 			t.Errorf("suggested %s, which a default spell already uses", s.Symbol)
 		}
 		// A suggestion pasted into a file must parse and pass --check.

@@ -11,7 +11,7 @@ import (
 func (b *Spellbook) Sigil(i int) []Pt {
 	s := b.Spells[i]
 	if len(s.Drawings) > 0 {
-		return s.Drawings[0].Strokes()
+		return simplifyStrokes(bridgeStrokes(s.Drawings[0].Strokes()), 0.7)
 	}
 	if gen, ok := shapes[s.Shape]; ok {
 		return gen()
@@ -40,6 +40,80 @@ func (s Spell) Invocation() string {
 		return "/" + s.Skill + " " + s.Args
 	}
 	return "/" + s.Skill
+}
+
+// bridgeStrokes joins each traced stroke's ends to the nearest ink of another
+// stroke within a couple of cells. The tracer splits drawings at junctions and
+// gaps, and recognition doesn't care, but a preview shows the missing joins.
+func bridgeStrokes(pts []Pt) []Pt {
+	out := append([]Pt(nil), pts...)
+	id := 0
+	for _, p := range pts {
+		id = max(id, p.ID+1)
+	}
+	for i, p := range pts {
+		isEnd := i == 0 || i == len(pts)-1 || pts[i-1].ID != p.ID || pts[i+1].ID != p.ID
+		if !isEnd {
+			continue
+		}
+		var near Pt
+		best := 2.3 // cells: covers the one-character gaps the tracer bridges
+		for _, q := range pts {
+			if d := dist(p, q); q.ID != p.ID && d > 0 && d <= best {
+				near, best = q, d
+			}
+		}
+		if best < 2.3 {
+			out = append(out, Pt{p.X, p.Y, id}, Pt{near.X, near.Y, id})
+			id++
+		}
+	}
+	return out
+}
+
+// simplifyStrokes straightens traced strokes with Ramer–Douglas–Peucker: the
+// cell-by-cell staircase of an ASCII drawing collapses back into straight
+// lines and smooth curves, which is what reads at thumbnail size.
+func simplifyStrokes(pts []Pt, eps float64) []Pt {
+	var out []Pt
+	for start := 0; start < len(pts); {
+		end := start + 1
+		for end < len(pts) && pts[end].ID == pts[start].ID {
+			end++
+		}
+		out = append(out, rdp(pts[start:end], eps)...)
+		start = end
+	}
+	return out
+}
+
+func rdp(pts []Pt, eps float64) []Pt {
+	if len(pts) < 3 {
+		return pts
+	}
+	a, b := pts[0], pts[len(pts)-1]
+	far, idx := 0.0, 0
+	for i := 1; i < len(pts)-1; i++ {
+		if d := segDist(pts[i], a, b); d > far {
+			far, idx = d, i
+		}
+	}
+	if far <= eps {
+		return []Pt{a, b}
+	}
+	left := rdp(pts[:idx+1], eps)
+	return append(left[:len(left)-1], rdp(pts[idx:], eps)...)
+}
+
+// segDist is the distance from p to the segment a–b.
+func segDist(p, a, b Pt) float64 {
+	dx, dy := b.X-a.X, b.Y-a.Y
+	l2 := dx*dx + dy*dy
+	if l2 == 0 {
+		return dist(p, a)
+	}
+	t := math.Max(0, math.Min(1, ((p.X-a.X)*dx+(p.Y-a.Y)*dy)/l2))
+	return math.Hypot(p.X-a.X-t*dx, p.Y-a.Y-t*dy)
 }
 
 // drawSigil fits pts into the world-space box (x, y, w, h), keeping proportions.
@@ -85,11 +159,11 @@ func drawGrimoire(c *Canvas, b *Spellbook, sigils [][]Pt) {
 			c.Text(col0, row, fmt.Sprintf("… %d more (/spells)", len(b.Spells)-i), dim)
 			break
 		}
-		// 5x3-cell sigil box, inset by a dot so strokes don't touch the edge.
+		// 7x3-cell sigil box, inset by a dot so strokes don't touch the edge.
 		x, y := float64(col0*2)+1, float64(row*4)*c.Aspect+1
-		drawSigil(c, sigils[i], x, y, 8, 12*c.Aspect-2, 0.3)
-		c.Text(col0+6, row, truncate(s.Name, grimoireCols-7), title)
-		c.Text(col0+6, row+1, truncate(s.Invocation(), grimoireCols-7), dim)
+		drawSigil(c, sigils[i], x, y, 12, 12*c.Aspect-2, 0.6)
+		c.Text(col0+8, row, truncate(s.Name, grimoireCols-9), title)
+		c.Text(col0+8, row+1, truncate(s.Invocation(), grimoireCols-9), dim)
 		row += 4
 	}
 }

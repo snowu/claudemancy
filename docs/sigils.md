@@ -70,7 +70,7 @@ the same id from an earlier one:
 
 - **Change a default:** copy `spells/code-review.sigil` to your user folder
   and edit the drawing, the name, or what it casts.
-- **Remove a default:** create `~/.config/claudemancy/spells/commit.sigil`
+- **Remove a default:** create `~/.config/claudemancy/spells/ship.sigil`
   containing `disabled: true` and then `---`.
 - **Add a spell:** create a new file, e.g. `deploy-staging.sigil`. Ids use
   lowercase letters, digits and dashes.
