@@ -272,17 +272,20 @@ func (a *App) addPoint(x, y float64) {
 		return
 	}
 	*s = append(*s, Pt{x, y, len(a.strokes) - 1})
-	for range 3 {
-		a.spark(x, y, 8+a.rng.Float64()*35, 0.2+a.rng.Float64()*0.45)
+	for range 5 {
+		a.spark(x, y, 10+a.rng.Float64()*55, 0.25+a.rng.Float64()*0.5)
 	}
 }
 
 func (a *App) spark(x, y, speed, life float64) {
-	if len(a.sparks) > 2500 {
-		return
-	}
 	ang := a.rng.Float64() * 2 * math.Pi
-	a.sparks = append(a.sparks, Spark{x, y, math.Cos(ang) * speed, math.Sin(ang) * speed, life, life})
+	a.sparkV(x, y, math.Cos(ang)*speed, math.Sin(ang)*speed, life)
+}
+
+func (a *App) sparkV(x, y, vx, vy, life float64) {
+	if len(a.sparks) < 3000 {
+		a.sparks = append(a.sparks, Spark{x, y, vx, vy, life, life})
+	}
 }
 
 func (a *App) strokesReach(wx float64) bool {
@@ -402,6 +405,16 @@ func (a *App) update(dt float64) {
 			a.strokes, a.st = nil, stDraw
 		}
 	case stCast:
+		// The spinning rim sheds sparks tangentially, like a sling-ring portal.
+		if a.stT > 0.3 && a.stT < 1.3 {
+			for range int(dt*260) + 1 {
+				ang := a.rng.Float64() * 2 * math.Pi
+				x, y := a.toX+a.toR*math.Cos(ang), a.toY+a.toR*math.Sin(ang)
+				sp := 45 + a.rng.Float64()*70
+				out := 8 + a.rng.Float64()*20
+				a.sparkV(x, y, -math.Sin(ang)*sp+math.Cos(ang)*out, math.Cos(ang)*sp+math.Sin(ang)*out, 0.2+a.rng.Float64()*0.35)
+			}
+		}
 		if a.stT >= 1.45 && !a.burst {
 			a.burst = true
 			for range 320 {
@@ -432,6 +445,9 @@ func (a *App) draw() {
 		for _, s := range a.strokes {
 			for i := 1; i < len(s); i++ {
 				v := float32(alpha * (0.88 + 0.12*math.Sin(a.now*18+float64(i)*0.45)))
+				if a.rng.Float64() < 0.03 {
+					v = float32(alpha * 1.45) // twinkle white-hot
+				}
 				c.Line(s[i-1].X, s[i-1].Y, s[i].X, s[i].Y, v)
 			}
 			if len(s) == 1 {
@@ -447,7 +463,7 @@ func (a *App) draw() {
 	}
 
 	for _, s := range a.sparks {
-		c.Plot(s.x, s.y, float32(s.life/s.max*1.25))
+		c.Spark(s.x, s.y, float32(s.life/s.max*1.25))
 	}
 
 	if a.st == stCast {

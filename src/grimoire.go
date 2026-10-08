@@ -50,7 +50,7 @@ func drawSigil(c *Canvas, pts []Pt, x, y, w, h float64, v float32) {
 	oy := y + (h-(maxY-minY)*scale)/2
 	for i := 1; i < len(pts); i++ {
 		if pts[i].ID == pts[i-1].ID {
-			c.Line(ox+(pts[i-1].X-minX)*scale, oy+(pts[i-1].Y-minY)*scale,
+			c.FaintLine(ox+(pts[i-1].X-minX)*scale, oy+(pts[i-1].Y-minY)*scale,
 				ox+(pts[i].X-minX)*scale, oy+(pts[i].Y-minY)*scale, v)
 		}
 	}

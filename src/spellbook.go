@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 //go:embed spellbook.default.json
@@ -20,10 +21,10 @@ type Spell struct {
 }
 
 type Spellbook struct {
-	MaxDistance float64 `json:"max_distance,omitempty"` // higher = more forgiving, more misfires
-	Glyphs      string  `json:"glyphs,omitempty"`       // rune alphabet for the mandala bands
-	Glow        bool    `json:"glow,omitempty"`         // blocky ember background glow behind strokes
-	Spells      []Spell `json:"spells"`
+	MaxDistance float64  `json:"max_distance,omitempty"` // higher = more forgiving, more misfires
+	Glyphs      string   `json:"glyphs,omitempty"`       // rune alphabet for the mandala bands
+	Glow        GlowMode `json:"glow,omitempty"`         // "soft" (default), "full" or "off"
+	Spells      []Spell  `json:"spells"`
 }
 
 func userSpellbookPath() string {
@@ -82,6 +83,33 @@ func (b *Spellbook) Recognizer() *Recognizer {
 		}
 	}
 	return r
+}
+
+// GlowMode is how much ember background glow strokes get. Cell backgrounds are
+// whole character cells, so wider glow reads as blocks.
+type GlowMode int
+
+const (
+	GlowSoft GlowMode = iota // only behind cells that hold strokes
+	GlowFull                 // also bleeds into neighbouring cells
+	GlowOff
+)
+
+// UnmarshalJSON accepts "soft"/"full"/"off", and true/false from 0.2.1 configs.
+func (g *GlowMode) UnmarshalJSON(b []byte) error {
+	switch strings.Trim(string(b), `"`) {
+	case "full", "true":
+		*g = GlowFull
+	case "off", "false", "none":
+		*g = GlowOff
+	default:
+		*g = GlowSoft
+	}
+	return nil
+}
+
+func (g GlowMode) MarshalJSON() ([]byte, error) {
+	return json.Marshal([]string{"soft", "full", "off"}[g])
 }
 
 // templatePts decodes a stored [x, y, stroke] template.

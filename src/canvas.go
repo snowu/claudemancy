@@ -16,13 +16,14 @@ type Canvas struct {
 	DW, DH     int
 	Aspect     float64 // dot height / dot width in pixels
 	I          []float32
+	L          []float32 // line-only intensity (no sparks); drives the glow
 	glyph      []rune
 	glyphV     []float32
 	glyphC     []RGB
 	glyphFixed []bool
 	energy     []float32
 	Fizzle     float32 // 0..1 drains the palette to ash
-	Glow       bool    // ember cell backgrounds; off by default because cells render as visible blocks
+	Glow       GlowMode
 	buf        bytes.Buffer
 }
 
@@ -31,6 +32,7 @@ func NewCanvas(cols, rows int, aspect float64) *Canvas {
 	return &Canvas{
 		Cols: cols, Rows: rows, DW: cols * 2, DH: rows * 4, Aspect: aspect,
 		I:     make([]float32, cols*2*rows*4),
+		L:     make([]float32, cols*2*rows*4),
 		glyph: make([]rune, n), glyphV: make([]float32, n), glyphC: make([]RGB, n), glyphFixed: make([]bool, n),
 		energy: make([]float32, n),
 	}
@@ -42,24 +44,42 @@ func (c *Canvas) WorldH() float64 { return float64(c.DH) * c.Aspect }
 
 func (c *Canvas) Clear() {
 	clear(c.I)
+	clear(c.L)
 	clear(c.glyph)
 }
 
+// Plot lights a dot that belongs to a line or ring, so it also feeds the glow.
 func (c *Canvas) Plot(wx, wy float64, v float32) {
-	x, y := int(math.Floor(wx)), int(math.Floor(wy/c.Aspect))
-	if x < 0 || y < 0 || x >= c.DW || y >= c.DH {
-		return
-	}
-	if i := y*c.DW + x; v > c.I[i] {
-		c.I[i] = v
+	if i, ok := c.dot(wx, wy); ok {
+		c.I[i], c.L[i] = max(c.I[i], v), max(c.L[i], v)
 	}
 }
 
-func (c *Canvas) Line(x0, y0, x1, y1 float64, v float32) {
+// Spark lights a free-floating dot that never glows its cell.
+func (c *Canvas) Spark(wx, wy float64, v float32) {
+	if i, ok := c.dot(wx, wy); ok {
+		c.I[i] = max(c.I[i], v)
+	}
+}
+
+func (c *Canvas) dot(wx, wy float64) (int, bool) {
+	x, y := int(math.Floor(wx)), int(math.Floor(wy/c.Aspect))
+	if x < 0 || y < 0 || x >= c.DW || y >= c.DH {
+		return 0, false
+	}
+	return y*c.DW + x, true
+}
+
+func (c *Canvas) Line(x0, y0, x1, y1 float64, v float32) { c.line(x0, y0, x1, y1, v, c.Plot) }
+
+// FaintLine draws without glow, for small UI art like the grimoire sigils.
+func (c *Canvas) FaintLine(x0, y0, x1, y1 float64, v float32) { c.line(x0, y0, x1, y1, v, c.Spark) }
+
+func (c *Canvas) line(x0, y0, x1, y1 float64, v float32, plot func(x, y float64, v float32)) {
 	n := int(math.Max(math.Abs(x1-x0), math.Abs(y1-y0)/c.Aspect)) + 1
 	for i := 0; i <= n; i++ {
 		t := float64(i) / float64(n)
-		c.Plot(x0+(x1-x0)*t, y0+(y1-y0)*t, v)
+		plot(x0+(x1-x0)*t, y0+(y1-y0)*t, v)
 	}
 }
 
@@ -166,7 +186,7 @@ func (c *Canvas) Render() []byte {
 			var sum float32
 			for dy := 0; dy < 4; dy++ {
 				row := (cy*4 + dy) * c.DW
-				sum += c.I[row+cx*2] + c.I[row+cx*2+1]
+				sum += c.L[row+cx*2] + c.L[row+cx*2+1]
 			}
 			c.energy[cy*c.Cols+cx] = sum / 4
 		}
@@ -181,20 +201,32 @@ func (c *Canvas) Render() []byte {
 			i := cy*c.Cols + cx
 			bits, peak := c.cellBits(cx, cy)
 
-			// Bloom: blur the cell energy into an ember-coloured background.
-			g := c.energy[i] * 0.4
-			for _, d := range [][3]int{{-1, 0, 12}, {1, 0, 12}, {0, -1, 12}, {0, 1, 12}, {-1, -1, 3}, {1, -1, 3}, {-1, 1, 3}, {1, 1, 3}} {
-				nx, ny := cx+d[0], cy+d[1]
-				if nx >= 0 && ny >= 0 && nx < c.Cols && ny < c.Rows {
-					g += c.energy[ny*c.Cols+nx] * float32(d[2]) / 100
+			// Bloom: an ember-coloured cell background. Soft mode only lights cells
+			// that hold stroke dots, so empty space never shows cell-shaped blocks;
+			// full mode also blurs into neighbours for a wider (blockier) halo.
+			var g float32
+			// Only cells a line passes through glow; sparks stay bare points of
+			// light instead of each dragging a cell-sized block along.
+			heated := c.energy[i] > 0.04 || (c.glyph[i] != 0 && !c.glyphFixed[i])
+			switch {
+			case c.Glow == GlowSoft && heated:
+				g = min(c.energy[i]*0.45+c.glyphV[i]*0.12*b2f(c.glyph[i] != 0), 0.28)
+			case c.Glow == GlowFull:
+				g = c.energy[i] * 0.4
+				for _, d := range [][3]int{{-1, 0, 12}, {1, 0, 12}, {0, -1, 12}, {0, 1, 12}, {-1, -1, 3}, {1, -1, 3}, {-1, 1, 3}, {1, 1, 3}} {
+					nx, ny := cx+d[0], cy+d[1]
+					if nx >= 0 && ny >= 0 && nx < c.Cols && ny < c.Rows {
+						g += c.energy[ny*c.Cols+nx] * float32(d[2]) / 100
+					}
 				}
+				if c.glyph[i] != 0 && !c.glyphFixed[i] {
+					g += c.glyphV[i] * 0.15
+				}
+				g = min(g*0.6, 0.42)
 			}
-			if c.glyph[i] != 0 && !c.glyphFixed[i] {
-				g += c.glyphV[i] * 0.15
-			}
-			g = min(g*0.38, 0.26) * (1 - c.Fizzle*0.7)
+			g *= 1 - c.Fizzle*0.7
 			bg := -1
-			if c.Glow && g >= 0.05 {
+			if g >= 0.05 {
 				bg = int(220*g)<<16 | int(55*g)<<8 | int(6*g)
 			}
 			if bg != lastBg {
@@ -224,6 +256,13 @@ func (c *Canvas) Render() []byte {
 	}
 	w.WriteString("\x1b[?2026l")
 	return w.Bytes()
+}
+
+func b2f(b bool) float32 {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 func rgbInt(c RGB) int { return int(c.R)<<16 | int(c.G)<<8 | int(c.B) }
