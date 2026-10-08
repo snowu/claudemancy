@@ -1,30 +1,41 @@
 package main
 
 import (
-	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
-//go:embed spellbook.default.json
-var defaultSpellbook []byte
-
 type Spell struct {
-	Name      string         `json:"name"`
-	Skill     string         `json:"skill"`
-	Args      string         `json:"args,omitempty"`
+	Name   string `json:"name"`
+	Skill  string `json:"skill,omitempty"`
+	Args   string `json:"args,omitempty"`
+	Prompt string `json:"prompt,omitempty"` // cast a freeform instruction instead of a skill
+
+	// Legacy spellbook.json spells (before sigil files).
 	Shape     string         `json:"shape,omitempty"`     // built-in sigil from shapes.go
 	Templates [][][3]float64 `json:"templates,omitempty"` // trained sigils: [x, y, stroke]
+
+	// From sigil files.
+	ID       string    `json:"-"` // filename stem; same ID in a later layer overrides
+	Drawings []Drawing `json:"-"`
+	Disabled bool      `json:"-"`
+	File     string    `json:"-"`
+	Source   string    `json:"-"` // built-in, user, project or spellbook.json
 }
 
+// Spellbook is the settings from spellbook.json plus every spell: the sigil
+// file layers first, then any legacy spells still stored in spellbook.json.
 type Spellbook struct {
 	MaxDistance float64  `json:"max_distance,omitempty"` // higher = more forgiving, more misfires
 	Glyphs      string   `json:"glyphs,omitempty"`       // rune alphabet for the mandala bands
 	Glow        GlowMode `json:"glow,omitempty"`         // "soft" (default), "full" or "off"
-	Spells      []Spell  `json:"spells"`
+	Spells      []Spell  `json:"spells,omitempty"`       // legacy; spells now live in .sigil files
+
+	Problems []error `json:"-"` // sigil files that failed to load
 }
 
 func userSpellbookPath() string {
@@ -36,45 +47,67 @@ func userSpellbookPath() string {
 	return filepath.Join(dir, "claudemancy", "spellbook.json")
 }
 
-// LoadSpellbook reads path, or the user's spellbook, or the embedded default.
-func LoadSpellbook(path string) (*Spellbook, string, error) {
-	if path == "" {
-		path = userSpellbookPath()
-	}
-	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		data, err = defaultSpellbook, nil
-	}
-	if err != nil {
-		return nil, path, err
+// LoadSpellbook reads the settings file (default ~/.config/claudemancy/
+// spellbook.json, optional) and the spells in dirs. Broken sigil files land in
+// Problems rather than failing the load, so one typo can't disable casting.
+func LoadSpellbook(settingsPath string, dirs []SpellDir) (*Spellbook, error) {
+	if settingsPath == "" {
+		settingsPath = userSpellbookPath()
 	}
 	var b Spellbook
-	if err := json.Unmarshal(data, &b); err != nil {
-		return nil, path, err
+	data, err := os.ReadFile(settingsPath)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+	case err != nil:
+		return nil, err
+	default:
+		if err := json.Unmarshal(data, &b); err != nil {
+			return nil, fmt.Errorf("%s: %w", settingsPath, err)
+		}
 	}
 	if b.MaxDistance == 0 {
-		b.MaxDistance = 1.3
+		b.MaxDistance = defaultMaxDistance
 	}
 	if b.Glyphs == "" {
 		b.Glyphs = "ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ"
 	}
-	return &b, path, nil
+
+	legacy := b.Spells
+	b.Spells, b.Problems = LoadSpellDirs(dirs)
+	for _, s := range legacy {
+		// Pre-sigil spellbooks copied the built-in shape spells; the sigil
+		// files replace those, so only spells with trained drawings carry over.
+		if len(s.Templates) == 0 {
+			continue
+		}
+		s.ID, s.Source, s.File = slug(s.Name), "spellbook.json", settingsPath
+		b.Spells = append(b.Spells, s)
+	}
+	return &b, nil
 }
 
-func (b *Spellbook) Save(path string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
+func slug(name string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(name) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case b.Len() > 0 && !strings.HasSuffix(b.String(), "-"):
+			b.WriteByte('-')
+		}
 	}
-	data, err := json.MarshalIndent(b, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, append(data, '\n'), 0o644)
+	return strings.Trim(b.String(), "-")
 }
+
+// validID reports whether id can be a sigil filename stem.
+func validID(id string) bool { return id != "" && slug(id) == id }
 
 func (b *Spellbook) Recognizer() *Recognizer {
 	r := &Recognizer{}
 	for i, s := range b.Spells {
+		for _, d := range s.Drawings {
+			r.AddTilted(i, d.Strokes())
+		}
 		if gen, ok := shapes[s.Shape]; ok {
 			r.AddTilted(i, gen())
 		}
@@ -131,25 +164,76 @@ func templatePts(t [][3]float64) []Pt {
 	return pts
 }
 
-// Inscribe stores a trained template under the spell named name, creating the
-// spell (bound to a skill of the same name) if it doesn't exist yet.
-func (b *Spellbook) Inscribe(name string, pts []Pt) int {
-	idx := -1
-	for i, s := range b.Spells {
-		if s.Name == name || (idx < 0 && s.Skill == name) {
-			idx = i
+// Inscribe adds a drawing of pts to the user's sigil file for id. A new file
+// starts from the spell that currently has that id, so overriding a built-in
+// keeps its drawings, or else from a new spell for the skill named id.
+// It returns the file written and how many drawings the spell now has.
+func (b *Spellbook) Inscribe(id string, pts []Pt) (string, int, error) {
+	path := filepath.Join(userSpellsDir(), id+sigilExt)
+	var s Spell
+	if data, err := os.ReadFile(path); err == nil {
+		if s, err = ParseSigil(id, string(data)); err != nil {
+			return path, 0, err
 		}
+	} else if i := b.indexOf(id); i >= 0 && b.Spells[i].Source != "spellbook.json" {
+		s = b.Spells[i]
+	} else {
+		s = Spell{Name: titleize(id), Skill: id}
 	}
-	if idx < 0 {
-		b.Spells = append(b.Spells, Spell{Name: name, Skill: name})
-		idx = len(b.Spells) - 1
+	s.Drawings = append(s.Drawings, Rasterize(pts, sigilCols, defaultAspect))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return path, 0, err
 	}
-	t := make([][3]float64, len(pts))
-	for i, p := range pts {
-		t[i] = [3]float64{round2(p.X), round2(p.Y), float64(p.ID)}
-	}
-	b.Spells[idx].Templates = append(b.Spells[idx].Templates, t)
-	return len(b.Spells[idx].Templates)
+	return path, len(s.Drawings), os.WriteFile(path, []byte(FormatSigil(s)), 0o644)
 }
 
-func round2(v float64) float64 { return float64(int(v*100+0.5)) / 100 }
+func (b *Spellbook) indexOf(id string) int {
+	for i, s := range b.Spells {
+		if s.ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+// Migrate turns legacy trained spells in spellbook.json into user sigil files
+// and drops them from the settings file. It returns the files written.
+func (b *Spellbook) Migrate(settingsPath string) ([]string, error) {
+	var written []string
+	for _, s := range b.Spells {
+		if s.Source != "spellbook.json" {
+			continue
+		}
+		path := filepath.Join(userSpellsDir(), s.ID+sigilExt)
+		if _, err := os.Stat(path); err == nil {
+			return written, fmt.Errorf("%s already exists; move it aside and migrate again", path)
+		}
+		out := Spell{Name: s.Name, Skill: s.Skill, Args: s.Args, Prompt: s.Prompt}
+		for _, t := range s.Templates {
+			out.Drawings = append(out.Drawings, Rasterize(templatePts(t), sigilCols, defaultAspect))
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return written, err
+		}
+		if err := os.WriteFile(path, []byte(FormatSigil(out)), 0o644); err != nil {
+			return written, err
+		}
+		written = append(written, path)
+	}
+	// Drop only the "spells" key, so settings left at their defaults stay
+	// unset and keep following future defaults.
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		return written, err
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return written, err
+	}
+	delete(raw, "spells")
+	data, err = json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		return written, err
+	}
+	return written, os.WriteFile(settingsPath, append(data, '\n'), 0o644)
+}

@@ -1,0 +1,8 @@
+name: Ouroboros Loop
+prompt: Run this project's test suite. If anything fails, fix it and run the tests again until they pass, then summarise what you changed.
+---
+  #######      #######
+##       ##  ##       ##
+#          ##          #
+##       ##  ##       ##
+  #######      #######

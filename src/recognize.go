@@ -25,17 +25,24 @@ func (r *Recognizer) Add(spell int, pts []Pt) {
 	}
 }
 
-// AddTilted adds the template plus slightly rotated copies; $P is not rotation
-// invariant and hand-drawn squares otherwise drift toward circles.
+// tilts are the extra rotations every template is stored at: $P is not
+// rotation invariant, and hand-drawn squares otherwise drift toward circles.
+var tilts = []float64{-12, 0, 12}
+
+func rotate(pts []Pt, deg float64) []Pt {
+	a := deg * math.Pi / 180
+	cos, sin := math.Cos(a), math.Sin(a)
+	out := make([]Pt, len(pts))
+	for i, p := range pts {
+		out[i] = Pt{p.X*cos - p.Y*sin, p.X*sin + p.Y*cos, p.ID}
+	}
+	return out
+}
+
+// AddTilted adds a stroke template plus slightly rotated copies.
 func (r *Recognizer) AddTilted(spell int, pts []Pt) {
-	for _, deg := range []float64{-12, 0, 12} {
-		a := deg * math.Pi / 180
-		cos, sin := math.Cos(a), math.Sin(a)
-		rot := make([]Pt, len(pts))
-		for i, p := range pts {
-			rot[i] = Pt{p.X*cos - p.Y*sin, p.X*sin + p.Y*cos, p.ID}
-		}
-		r.Add(spell, rot)
+	for _, deg := range tilts {
+		r.Add(spell, rotate(pts, deg))
 	}
 }
 
@@ -45,11 +52,14 @@ type Match struct {
 	Ratio float64 // Dist / distance to the best *other* spell (0 if only one spell)
 }
 
-// Confident rejects scribbles: measured on synthetic hand-drawn sigils vs random
-// walks, dist < 1.3 && ratio < 0.85 accepts ~96% of sigils and ~1% of scribbles.
+// Confident rejects scribbles. Measured against the default ASCII sigils with
+// synthetic hand-drawn input vs random walks, dist < 1.22 && ratio < 0.9
+// accepts ~92% of sigils, never the wrong spell, and ~0.7% of scribbles.
 func (m Match) Confident(maxDist float64) bool {
-	return m.Spell >= 0 && m.Dist < maxDist && m.Ratio < 0.85
+	return m.Spell >= 0 && m.Dist < maxDist && m.Ratio < 0.9
 }
+
+const defaultMaxDistance = 1.22
 
 // Score is a 0..1 display value (1 = perfect match).
 func (m Match) Score() float64 { return math.Min(math.Max(1.6-m.Dist, 0), 1) }
@@ -81,8 +91,11 @@ func (r *Recognizer) Recognize(pts []Pt) Match {
 	return m
 }
 
-func normalizeCloud(pts []Pt) []Pt {
-	p := resample(pts, cloudN)
+func normalizeCloud(pts []Pt) []Pt { return normalizePoints(resample(pts, cloudN)) }
+
+// normalizePoints scales a cloud into the unit box and centres it on the origin.
+func normalizePoints(p []Pt) []Pt {
+	p = append([]Pt(nil), p...)
 	minX, minY, maxX, maxY := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
 	for _, q := range p {
 		minX, minY = math.Min(minX, q.X), math.Min(minY, q.Y)
