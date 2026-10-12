@@ -71,8 +71,15 @@ launch() {
     tmux display-popup -E -B -w 85% -h 85% "$(printf '%q ' "${cmd[@]}")" &
     return
   fi
+  local term
+  term=$(pick_terminal)
+  # Report this before the launch below, whose output is discarded.
+  case $term in
+    ghostty | kitty | foot | wezterm | alacritty) ;;
+    *) echo '{"error":"no supported terminal found (run Claude Code inside tmux, or set CLAUDEMANCY_TERMINAL)"}'; exit 1 ;;
+  esac
   hyprland_rule
-  case $(pick_terminal) in
+  case $term in
     # Hand the window to the running Ghostty over D-Bus instead of cold-starting one
     # (~900ms). Calling busctl directly is the same message `ghostty +new-window`
     # sends, minus ~35ms of Ghostty CLI startup.
@@ -90,7 +97,6 @@ launch() {
       setsid -f foot --app-id="$id" --title="$title" "${cmd[@]}" ;;
     wezterm) setsid -f wezterm start --class "$id" -- "${cmd[@]}" ;;
     alacritty) setsid -f alacritty --class "$id" --title "$title" -e "${cmd[@]}" ;;
-    *) echo '{"error":"no supported terminal found (set CLAUDEMANCY_TERMINAL)"}'; exit 1 ;;
   esac >/dev/null 2>&1
 }
 
